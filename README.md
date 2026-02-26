@@ -114,18 +114,6 @@ pip install -r requirements.txt
 If you have an NVIDIA GPU:
   - pip install torch --index-url https://download.pytorch.org/whl/cu121
 
-Verify:
-  import torch
-  print(torch.cuda.is_available())
-
-GPU usage is controlled via:
-  DEVICE = "auto"   # in configuration.py
-
-Options:
-  "auto" → GPU if available
-  "cpu" → Force CPU
-  "cuda" → Force GPU
-
 ---
 
 ### baselines_vs_dqn_evaluator.ipynb
