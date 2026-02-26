@@ -1,0 +1,9 @@
+ipykernel
+numpy
+scikit-learn
+matplotlib
+torch
+
+# NOTE:
+# Install CUDA version of PyTorch separately using:
+# pip install torch --index-url https://download.pytorch.org/whl/cu121
