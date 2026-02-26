@@ -1,4 +1,4 @@
-🚀 ##Agentic Load Balancer using Deep Reinforcement Learning
+🚀 ## Agentic Load Balancer using Deep Reinforcement Learning
 
 An intelligent, reinforcement learning–based cloud load balancer that dynamically allocates workloads across servers and performs adaptive autoscaling to optimize latency, load balance, and SLA compliance.
 
@@ -6,7 +6,7 @@ This project compares a Deep Q-Network (DQN) agent against traditional load bala
 
 ---
 
-📌 ##Overview
+📌 ## Overview
 
 Modern cloud systems face dynamic and unpredictable workloads. Traditional load balancing strategies (e.g., Round Robin, Least Connections) do not adapt optimally to fluctuating demand and SLA constraints.
 
@@ -20,7 +20,7 @@ This project implements an Agentic Load Balancer using Deep Reinforcement Learni
 
 ---
 
-🧠 ##Key Features
+🧠 ## Key Features
 
 - ✅ Deep Q-Network (DQN) based load balancing
 - ✅ Configurable autoscaling (enable/disable)
@@ -36,14 +36,14 @@ This project implements an Agentic Load Balancer using Deep Reinforcement Learni
 
 ---
 
-🏗️ ##Project Architecture
+🏗️ ## Project Architecture
 ```
 CC Project
 │
-├── cloud_env_simulator.py      # Cloud environment simulation
-├── configuration.py            # All configurable hyperparameters
-├── dqn_agent.py                # DQN model + replay buffer
-├── dqn_agent_trainer.py        # Training loop
+├── cloud_env_simulator.py            # Cloud environment simulation
+├── configuration.py                  # All configurable hyperparameters
+├── dqn_agent.py                      # DQN model + replay buffer
+├── dqn_agent_trainer.py              # Training loop
 ├── baselines_vs_dqn_evaluator.ipynb  # Evaluation & plotting
 ├── requirements.txt
 ├── .gitignore
@@ -51,8 +51,8 @@ CC Project
 
 ---
 
-⚙️ ##How It Works
-###Environment (cloud_env_simulator.py)
+⚙️ ## How It Works
+### Environment (cloud_env_simulator.py)
 
 Simulates:
   - Server CPU utilization
