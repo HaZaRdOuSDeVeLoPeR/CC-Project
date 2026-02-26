@@ -171,6 +171,6 @@ This makes experimentation and ablation studies easy.
 
 ## 👨‍💻 Author
 
-Aditya Vimal
-B.Tech CSE
+Aditya Vimal  
+B.Tech CSE  
 NIT Warangal
