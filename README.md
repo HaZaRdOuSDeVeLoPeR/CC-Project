@@ -73,13 +73,13 @@ Includes:
 
 If autoscaling enabled:
 
-  0 → MAX_SERVER_COUNT - 1   : Route to server
-  MAX_SERVER_COUNT           : Scale up
-  MAX_SERVER_COUNT + 1       : Scale down
+  - 0 → MAX_SERVER_COUNT - 1   : Route to server
+  - MAX_SERVER_COUNT           : Scale up
+  - MAX_SERVER_COUNT + 1       : Scale down
 
 Otherwise:
 
-  0 → MAX_SERVER_COUNT - 1   : Route to server
+  - 0 → MAX_SERVER_COUNT - 1   : Route to server
 
 ---
 
@@ -90,7 +90,7 @@ The agent minimizes:
   - SLA violations
   - Load imbalance
   - Excessive server usage
-  - Reward= −[Latency=SLA_Penalty=LoadVariance=ScalingCost]
+  - Reward= − [Latency + SLA_Penalty + LoadVariance + ScalingCost]
 
 This encourages stable, balanced, low-latency operation.
 
