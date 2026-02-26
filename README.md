@@ -99,7 +99,7 @@ This encourages stable, balanced, low-latency operation.
 ## 🖥️ Installation
 
 ### 1️⃣ Clone Repository
-git clone <your-repo-url>
+git clone https://github.com/HaZaRdOuSDeVeLoPeR/CC-Project.git  
 cd CC-Project
 
 ### 2️⃣ Create Virtual Environment
