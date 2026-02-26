@@ -29,9 +29,9 @@ This project implements an Agentic Load Balancer using Deep Reinforcement Learni
 - ✅ Replay buffer with experience replay
 - ✅ Target network stabilization
 - ✅ Baseline comparisons:
-  -- Random Allocation
-  -- Round Robin
-  -- Least Connections
+  - Random Allocation
+  - Round Robin
+  - Least Connections
 - ✅ Convergence analysis & reward visualization
 
 ---
