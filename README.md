@@ -1,4 +1,4 @@
-🚀 ## Agentic Load Balancer using Deep Reinforcement Learning
+## 🚀 Agentic Load Balancer using Deep Reinforcement Learning
 
 An intelligent, reinforcement learning–based cloud load balancer that dynamically allocates workloads across servers and performs adaptive autoscaling to optimize latency, load balance, and SLA compliance.
 
@@ -6,7 +6,7 @@ This project compares a Deep Q-Network (DQN) agent against traditional load bala
 
 ---
 
-📌 ## Overview
+## 📌 Overview
 
 Modern cloud systems face dynamic and unpredictable workloads. Traditional load balancing strategies (e.g., Round Robin, Least Connections) do not adapt optimally to fluctuating demand and SLA constraints.
 
@@ -20,7 +20,7 @@ This project implements an Agentic Load Balancer using Deep Reinforcement Learni
 
 ---
 
-🧠 ## Key Features
+## 🧠 Key Features
 
 - ✅ Deep Q-Network (DQN) based load balancing
 - ✅ Configurable autoscaling (enable/disable)
@@ -36,7 +36,7 @@ This project implements an Agentic Load Balancer using Deep Reinforcement Learni
 
 ---
 
-🏗️ ## Project Architecture
+## 🏗️ Project Architecture
 ```
 CC Project
 │
@@ -51,7 +51,7 @@ CC Project
 
 ---
 
-⚙️ ## How It Works
+## ⚙️ How It Works
 ### Environment (cloud_env_simulator.py)
 
 Simulates:
@@ -83,7 +83,7 @@ Otherwise:
 
 ---
 
-🎯 ##Reward Function
+## 🎯 Reward Function
 
 The agent minimizes:
   - Average latency
@@ -96,20 +96,20 @@ This encourages stable, balanced, low-latency operation.
 
 ---
 
-🖥️ ##Installation
+## 🖥️ Installation
 
-1️⃣ ####Clone Repository
+### 1️⃣ Clone Repository
 git clone <your-repo-url>
 cd CC-Project
 
-2️⃣ ###Create Virtual Environment
+### 2️⃣ Create Virtual Environment
 python -m venv venv
 venv\Scripts\activate
 
-3️⃣ ###Install Dependencies
+### 3️⃣ Install Dependencies
 pip install -r requirements.txt
 
-4️⃣ (Optional) Install CUDA-enabled PyTorch for GPU
+### 4️⃣ (Optional) Install CUDA-enabled PyTorch for GPU
 
 If you have an NVIDIA GPU:
   - pip install torch --index-url https://download.pytorch.org/whl/cu121
@@ -128,13 +128,13 @@ Options:
 
 ---
 
-###baselines_vs_dqn_evaluator.ipynb
+### baselines_vs_dqn_evaluator.ipynb
   - This notebook evaluates all baselines
   - Compares performance
   - Plots reward distributions
   - Demonstrates convergence
 
-🔧 ##Configuration Options
+## 🔧Configuration Options
 
 All configurable parameters are centralized in: configuration.py
 Including:
@@ -150,7 +150,7 @@ This makes experimentation and ablation studies easy.
 
 ---
 
-🧪 ##Research Observations
+## 🧪 Research Observations
 
   - DQN converges to a steady-state control strategy.
   - Evaluation with ε = 0 yields deterministic performance.
@@ -160,7 +160,7 @@ This makes experimentation and ablation studies easy.
 
 ---
 
-📌 ##Future Improvements
+## 📌 Future Improvements
 
   - Double DQN implementation
   - Prioritized Experience Replay
@@ -171,7 +171,7 @@ This makes experimentation and ablation studies easy.
 
 ---
 
-📚 ##Technologies Used
+## 📚 Technologies Used
 
   - Python 3.10
   - PyTorch
@@ -181,7 +181,7 @@ This makes experimentation and ablation studies easy.
 
 ---
 
-👨‍💻 ##Author
+## 👨‍💻 Author
 
 Aditya Vimal
 B.Tech CSE
