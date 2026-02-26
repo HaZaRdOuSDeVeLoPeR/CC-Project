@@ -124,7 +124,7 @@ If you have an NVIDIA GPU:
 
 ## 🔧Configuration Options
 
-All configurable parameters are centralized in: configuration.py
+All configurable parameters are centralized in: configuration.py  
 Including:
   - Server counts
   - Processing rate
