@@ -175,11 +175,11 @@ Aditya Vimal
 B.Tech CSE  
 NIT Warangal
 
-Parth Yogesh Dhat
+Parth Yogesh Dhat  
 B.Tech CSE  
 NIT Warangal
 
-Sameer Lucky
+Sameer Lucky  
 B.Tech CSE  
 NIT Warangal
 
