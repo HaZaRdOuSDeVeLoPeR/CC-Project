@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}RL Load Balancer — Home{% endblock %}
+
+{% block content %}
+<div class="fade-in" style="padding-top: 3rem;">
+
+    <div style="max-width: 680px; margin: 0 auto; text-align: center; padding: 2rem 0 4rem;">
+        <div class="page-tag" style="justify-content: center;">Deep Reinforcement Learning</div>
+        <h1 class="page-title" style="font-size: 3.2rem; margin-bottom: 1.2rem;">
+            Agentic Load<br>Balancer
+        </h1>
+        <p style="color: var(--text-dim); font-size: 13px; line-height: 1.7; margin-bottom: 2.5rem; max-width: 480px; margin-left: auto; margin-right: auto;">
+            A DQN-powered cloud load balancing agent that learns to route requests, manage server queues, and dynamically scale infrastructure — evaluated against classical baselines.
+        </p>
+
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <a class="btn btn-primary" href="/train">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Train New Model
+            </a>
+            <a class="btn {% if model_exists %}btn-success{% else %}btn-secondary{% endif %}" href="/evaluate" {% if not model_exists %}style="opacity:0.5; pointer-events:none;"{% endif %}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
+                Evaluate Model
+            </a>
+        </div>
+
+        {% if not model_exists %}
+        <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px;">
+            ⚠ No trained model found — train one first to unlock evaluation
+        </p>
+        {% else %}
+        <p style="font-size: 11px; color: var(--green); margin-top: 12px;">
+            ✓ Trained model detected — ready to evaluate
+        </p>
+        {% endif %}
+    </div>
+
+    <hr class="section-sep">
+
+    <!-- Architecture overview -->
+    <div style="margin-bottom: 3rem;">
+        <div class="page-tag">System Architecture</div>
+        <h2 style="font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1.3rem; margin-bottom: 1.5rem;">How it works</h2>
+
+        <div class="grid-3" style="gap: 1.5rem;">
+            <div class="card">
+                <div style="color: var(--accent); font-size: 22px; margin-bottom: 12px;">01</div>
+                <div style="font-weight: 500; margin-bottom: 8px; font-size: 13px;">Cloud Environment</div>
+                <div style="color: var(--text-dim); font-size: 12px; line-height: 1.6;">Simulates a cloud cluster with configurable servers. Poisson-distributed request arrivals, per-server queues, CPU utilization, and SLA violation tracking.</div>
+            </div>
+            <div class="card">
+                <div style="color: var(--accent2); font-size: 22px; margin-bottom: 12px;">02</div>
+                <div style="font-weight: 500; margin-bottom: 8px; font-size: 13px;">DQN Agent</div>
+                <div style="color: var(--text-dim); font-size: 12px; line-height: 1.6;">Double DQN with experience replay and target network. Observes queue lengths, CPU usage, and server count. Actions: route to server N or scale up/down.</div>
+            </div>
+            <div class="card">
+                <div style="color: var(--green); font-size: 22px; margin-bottom: 12px;">03</div>
+                <div style="font-weight: 500; margin-bottom: 8px; font-size: 13px;">Baseline Comparison</div>
+                <div style="color: var(--text-dim); font-size: 12px; line-height: 1.6;">Evaluated against Random, Round Robin, and Least Connections routing. Metrics: cumulative reward, avg latency, SLA violations, CPU utilization.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Baseline descriptions -->
+    <div>
+        <div class="page-tag">Baselines</div>
+        <h2 style="font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1.3rem; margin-bottom: 1.5rem;">Routing strategies compared</h2>
+
+        <div class="grid-2" style="gap: 1rem;">
+            <div class="card" style="display: flex; gap: 14px; align-items: flex-start;">
+                <span class="method-dot method-random" style="margin-top: 4px;"></span>
+                <div>
+                    <div style="font-size: 12px; font-weight: 500; margin-bottom: 4px;">Random Routing</div>
+                    <div style="font-size: 11px; color: var(--text-dim); line-height: 1.6;">Assigns each request to a randomly selected server. Simple but ignores all load information — used as worst-case baseline.</div>
+                </div>
+            </div>
+            <div class="card" style="display: flex; gap: 14px; align-items: flex-start;">
+                <span class="method-dot method-rr" style="margin-top: 4px;"></span>
+                <div>
+                    <div style="font-size: 12px; font-weight: 500; margin-bottom: 4px;">Round Robin</div>
+                    <div style="font-size: 11px; color: var(--text-dim); line-height: 1.6;">Cycles through servers sequentially. Distributes evenly without considering actual load — good for uniform workloads.</div>
+                </div>
+            </div>
+            <div class="card" style="display: flex; gap: 14px; align-items: flex-start;">
+                <span class="method-dot method-lc" style="margin-top: 4px;"></span>
+                <div>
+                    <div style="font-size: 12px; font-weight: 500; margin-bottom: 4px;">Least Connections</div>
+                    <div style="font-size: 11px; color: var(--text-dim); line-height: 1.6;">Routes to the server with the smallest current queue. Greedy, reactive load balancing — strong classical baseline.</div>
+                </div>
+            </div>
+            <div class="card" style="display: flex; gap: 14px; align-items: flex-start;">
+                <span class="method-dot method-dqn" style="margin-top: 4px;"></span>
+                <div>
+                    <div style="font-size: 12px; font-weight: 500; margin-bottom: 4px;">DQN Agent</div>
+                    <div style="font-size: 11px; color: var(--text-dim); line-height: 1.6;">Learns a policy via deep Q-learning that considers global state, future consequences, and the cost of SLA violations and server scaling.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
