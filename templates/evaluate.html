@@ -1,701 +1,438 @@
 {% extends "base.html" %}
-
-{% block title %}Evaluate — RL Load Balancer{% endblock %}
+{% block title %}Evaluate Model — RL Load Balancer{% endblock %}
 
 {% block content %}
-<div class="fade-in">
-    <div class="page-header">
-        <div class="page-tag">Model Evaluation</div>
-        <h1 class="page-title">Evaluate & Compare</h1>
-        <p class="page-subtitle">Run the DQN agent against classical baselines. Track live metrics across all routing strategies.</p>
-    </div>
+<div class="page-header">
+    <div class="tag">MODEL EVALUATION</div>
+    <h1>Evaluate &amp; Compare</h1>
+    <p>Run the trained DQN against Random, Round Robin, and Least Connections baselines.</p>
+</div>
 
-    {% if not model_exists %}
-    <div class="alert alert-warning" style="margin-bottom: 2rem;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        No trained model found. <a href="/train" style="color: var(--yellow);">Train a model first →</a>
-    </div>
-    {% endif %}
+<!-- Model info banner -->
+<div id="model-banner" style="display:none;margin-bottom:1.5rem;padding:14px 16px;border-radius:8px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);font-size:11px;"></div>
+<div id="no-model-banner" style="display:none;margin-bottom:1.5rem;padding:12px 16px;border-radius:8px;background:rgba(255,59,92,0.08);border:1px solid rgba(255,59,92,0.3);font-size:12px;">
+    ⚠ No trained model found yet. <a href="/train" style="color:var(--accent);">Train a model first →</a> — you can still configure eval parameters below.
+</div>
 
-    <!-- Step 1: Choose parameter source -->
-    <div id="param-choice-section">
-        <div class="card" style="margin-bottom: 1.5rem;">
-            <div class="card-label">Evaluation Parameters</div>
-            <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 1.2rem;">Choose which configuration to use for evaluation:</p>
-            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                <button class="btn btn-primary" id="use-train-params-btn" onclick="selectParams('trained')" {% if not model_exists %}disabled style="opacity:0.4; cursor:not-allowed;"{% endif %}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    Use Training Parameters
-                </button>
-                <button class="btn btn-secondary" onclick="selectParams('custom')">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 18.66l-1.41 1.41M20 12h-2M6 12H4M18.66 18.66l-1.41-1.41M6.75 6.75L5.34 5.34M12 4V2M12 22v-2"/></svg>
-                    Custom Parameters
-                </button>
-            </div>
-            {% if not train_config %}
-            <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
-                ⚠ No training session found in this server instance — "Use Training Parameters" will use defaults.
-            </p>
-            {% endif %}
+<!-- Config -->
+<div id="eval-config" class="card" style="margin-bottom:1.5rem;">
+    <div class="card-label">Evaluation Parameters</div>
+    <div class="form-grid" style="margin-bottom:1rem;">
+        <div class="form-group">
+            <label class="form-label">Test Episodes</label>
+            <input class="form-input" type="number" id="e_TEST_EPISODE_COUNT" value="300" min="1">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Episode Length</label>
+            <input class="form-input" type="number" id="e_EPISODE_LENGTH" value="500" min="10">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Avg Requests / Step (λ)</label>
+            <input class="form-input" type="number" id="e_AVG_INCOMING_REQUESTS" value="5" min="1">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Avg Request Workload</label>
+            <input class="form-input" type="number" id="e_AVG_REQUEST_WORKLOAD" value="10" min="1">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Workload Variance (±)</label>
+            <input class="form-input" type="number" id="e_REQUEST_WORKLOAD_VARIANCE" value="5" min="0">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Processing Power</label>
+            <input class="form-input" type="number" id="e_PROCESSING_POWER" value="10" min="1">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Max Queue Length</label>
+            <input class="form-input" type="number" id="e_MAX_QUEUE_LENGTH" value="200" min="1">
+        </div>
+        <div class="form-group">
+            <label class="form-label">SLA Threshold</label>
+            <input class="form-input" type="number" id="e_SLA_VIOLATION_LATENCY" value="80" min="1">
         </div>
     </div>
+    <input type="hidden" id="e_SERVER_COUNT" value="10">
+    <div style="padding:10px 12px;border-radius:6px;background:var(--surface);border:1px solid var(--border);font-size:11px;margin-bottom:1rem;">
+        🔒 <b>Server Count</b>: <span id="e_SERVER_COUNT_display" style="color:var(--accent);font-weight:600;">loading…</span>
+        &nbsp;— locked by trained model (cannot change without retraining).
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-primary" onclick="startEval()">Start Evaluation</button>
+        <button class="btn btn-secondary" onclick="loadTrainConfig()">Reload Training Parameters</button>
+        <a class="btn btn-secondary" href="/train">← Back to Training</a>
+    </div>
+</div>
 
-    <!-- Custom params config -->
-    <div id="custom-params-section" style="display:none;">
-        <div class="card" style="margin-bottom: 1.5rem;">
-            <div class="card-label">Custom Evaluation Configuration</div>
-            <form id="eval-form">
-                <div class="grid-2" style="gap: 1.5rem;">
-                    <div>
-                        <h3 style="font-size: 12px; color: var(--text-dim); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.1em;">Request Parameters</h3>
+<!-- Method counters -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div class="stat-block"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--accent);display:inline-block;"></span><span class="stat-label" style="margin:0;">DQN AGENT</span></div><div class="stat-value" id="cnt-dqn">0</div><div class="stat-sub">episodes done</div></div>
+    <div class="stat-block"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--accent3);display:inline-block;"></span><span class="stat-label" style="margin:0;">RANDOM</span></div><div class="stat-value" id="cnt-random" style="color:var(--accent3);">0</div><div class="stat-sub">episodes done</div></div>
+    <div class="stat-block"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--accent2);display:inline-block;"></span><span class="stat-label" style="margin:0;">ROUND ROBIN</span></div><div class="stat-value" id="cnt-rr" style="color:var(--accent2);">0</div><div class="stat-sub">episodes done</div></div>
+    <div class="stat-block"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);display:inline-block;"></span><span class="stat-label" style="margin:0;">LEAST CONN.</span></div><div class="stat-value" id="cnt-lc" style="color:var(--green);">0</div><div class="stat-sub">episodes done</div></div>
+</div>
 
-                        <div class="form-group">
-                            <label class="form-label">Avg Incoming Requests (λ)</label>
-                            <input class="form-input" type="number" id="e_AVG_INCOMING_REQUESTS" name="AVG_INCOMING_REQUESTS" value="{{ config.AVG_INCOMING_REQUESTS }}" min="1">
-                            <div class="collapsible">
-                                <span class="collapsible-trigger">▶ What is this?</span>
-                                <div class="collapsible-content" id="eh_AVG_INCOMING_REQUESTS">Mean of the Poisson distribution for new requests per step. Determines traffic intensity.</div>
-                            </div>
-                        </div>
+<!-- Live charts -->
+<div class="grid-2" style="margin-bottom:1.5rem;">
+    <div class="chart-box"><div class="chart-title">Cumulative Reward per Episode — All Methods</div><canvas id="reward-chart" height="200"></canvas></div>
+    <div class="chart-box"><div class="chart-title">Average Latency per Episode — All Methods</div><canvas id="latency-chart" height="200"></canvas></div>
+</div>
+<div class="grid-2" style="margin-bottom:1.5rem;">
+    <div class="chart-box"><div class="chart-title">SLA Violations per Episode</div><canvas id="sla-chart" height="200"></canvas></div>
+    <div class="chart-box"><div class="chart-title">Average CPU Utilization per Episode</div><canvas id="cpu-chart" height="200"></canvas></div>
+</div>
 
-                        <div class="form-group">
-                            <label class="form-label">Avg Request Workload (CPU units)</label>
-                            <input class="form-input" type="number" id="e_AVG_REQUEST_WORKLOAD" name="AVG_REQUEST_WORKLOAD" value="{{ config.AVG_REQUEST_WORKLOAD }}" min="1">
-                            <div class="collapsible">
-                                <span class="collapsible-trigger">▶ What is this?</span>
-                                <div class="collapsible-content" id="eh_AVG_REQUEST_WORKLOAD">Average CPU cost added to a server's queue per request.</div>
-                            </div>
-                        </div>
+<!-- Error -->
+<div id="error-box" style="display:none;" class="alert alert-error">
+    <div id="error-friendly" style="font-size:13px;font-weight:600;margin-bottom:8px;"></div>
+    <pre id="error-text" style="font-size:10px;white-space:pre-wrap;color:var(--text-dim);"></pre>
+</div>
 
-                        <div class="form-group">
-                            <label class="form-label">Workload Variance</label>
-                            <input class="form-input" type="number" name="REQUEST_WORKLOAD_VARIANCE" value="{{ config.REQUEST_WORKLOAD_VARIANCE }}" min="0">
-                            <div class="collapsible">
-                                <span class="collapsible-trigger">▶ What is this?</span>
-                                <div class="collapsible-content">±range for per-request workload. Adds unpredictability to traffic patterns.</div>
-                            </div>
-                        </div>
+<!-- Results -->
+<div id="results-section" style="display:none;">
+    <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:1.5rem;border-top:1px solid var(--border);padding-top:1.5rem;">
+        <span class="tag" style="margin-right:8px;">FINAL RESULTS</span>Performance Summary
+    </h2>
 
-                        <div class="form-group">
-                            <label class="form-label">SLA Violation Threshold (latency)</label>
-                            <input class="form-input" type="number" id="e_SLA_VIOLATION_LATENCY" name="SLA_VIOLATION_LATENCY" value="{{ config.SLA_VIOLATION_LATENCY }}" min="1">
-                            <div class="collapsible">
-                                <span class="collapsible-trigger">▶ What is this?</span>
-                                <div class="collapsible-content" id="eh_SLA_VIOLATION_LATENCY">Queue length above which an SLA violation is counted. Lower = stricter SLA.</div>
-                            </div>
-                        </div>
-                    </div>
+    <div id="winner-banner" style="margin-bottom:1.5rem;padding:14px 16px;border-radius:8px;background:rgba(255,214,0,0.08);border:1px solid rgba(255,214,0,0.2);font-size:13px;font-weight:600;"></div>
 
-                    <div>
-                        <h3 style="font-size: 12px; color: var(--text-dim); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.1em;">Evaluation Settings</h3>
-
-                        <div class="form-group">
-                            <label class="form-label">Test Episodes</label>
-                            <input class="form-input" type="number" id="e_TEST_EPISODE_COUNT" name="TEST_EPISODE_COUNT" value="{{ config.TEST_EPISODE_COUNT }}" min="1">
-                            <div class="collapsible">
-                                <span class="collapsible-trigger">▶ What is this?</span>
-                                <div class="collapsible-content" id="eh_TEST_EPISODE_COUNT">Number of evaluation episodes per method. More episodes = more statistically reliable results. Start with 50 for quick runs.</div>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Steps per Episode</label>
-                            <input class="form-input" type="number" id="e_EPISODE_LENGTH" name="EPISODE_LENGTH" value="{{ config.EPISODE_LENGTH }}" min="10">
-                            <div class="collapsible">
-                                <span class="collapsible-trigger">▶ What is this?</span>
-                                <div class="collapsible-content" id="eh_EPISODE_LENGTH">Timesteps per evaluation episode. Should match what the model was trained on for a fair comparison.</div>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Max Servers</label>
-                            <input class="form-input" type="number" id="e_MAX_SERVER_COUNT" name="MAX_SERVER_COUNT" value="{{ config.MAX_SERVER_COUNT }}" min="1">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Autoscaling</label>
-                            <div class="form-toggle">
-                                <label class="toggle">
-                                    <input type="checkbox" name="AUTOSCALING" id="eval-autoscale-toggle" {{ 'checked' if config.AUTOSCALING else '' }}>
-                                    <span class="toggle-slider"></span>
-                                </label>
-                                <span style="font-size: 12px; color: var(--text-dim);" id="eval-autoscale-label">{{ 'Enabled' if config.AUTOSCALING else 'Disabled' }}</span>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Processing Power / Server / Step</label>
-                            <input class="form-input" type="number" id="e_PROCESSING_POWER" name="PROCESSING_POWER" value="{{ config.PROCESSING_POWER }}" min="1">
-                            <div class="collapsible">
-                                <span class="collapsible-trigger">▶ What is this?</span>
-                                <div class="collapsible-content" id="eh_PROCESSING_POWER">CPU units processed per server per step. Affects how quickly queues drain.</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <input type="hidden" name="SERVER_COUNT" value="{{ config.SERVER_COUNT }}">
-                <input type="hidden" name="MIN_SERVER_COUNT" value="{{ config.MIN_SERVER_COUNT }}">
-                <input type="hidden" name="MAX_SERVER_UTILIZATION" value="{{ config.MAX_SERVER_UTILIZATION }}">
-                <input type="hidden" name="MAX_QUEUE_LENGTH" value="{{ config.MAX_QUEUE_LENGTH }}">
-                <input type="hidden" name="GAMMA" value="{{ config.GAMMA }}">
-                <input type="hidden" name="LEARNING_RATE" value="{{ config.LEARNING_RATE }}">
-                <input type="hidden" name="BATCH_SIZE" value="{{ config.BATCH_SIZE }}">
-                <input type="hidden" name="REPLAY_BUFFER_SIZE" value="{{ config.REPLAY_BUFFER_SIZE }}">
-                <input type="hidden" name="EPSILON_START" value="{{ config.EPSILON_START }}">
-                <input type="hidden" name="EPSILON_MIN" value="{{ config.EPSILON_MIN }}">
-                <input type="hidden" name="TARGET_UPDATE_STEPS" value="{{ config.TARGET_UPDATE_STEPS }}">
-                <input type="hidden" name="HIDDEN_DIM" value="{{ config.HIDDEN_DIM }}">
-                <input type="hidden" name="TRAIN_EPISODE_COUNT" value="{{ config.TRAIN_EPISODE_COUNT }}">
-
-                <!-- Eval Parameter Health -->
-                <div class="card" id="eval-health-panel" style="margin-bottom:1rem;">
-                    <div class="card-label">Parameter Health Check
-                        <span style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">— updates live</span>
-                    </div>
-                    <div id="eval-health-rows" style="display:flex;flex-direction:column;gap:8px;"></div>
-                </div>
-
-                <div style="display: flex; gap: 12px; margin-top: 1rem; flex-wrap: wrap;">
-                    <button class="btn btn-primary" type="submit" id="eval-start-btn" {% if not model_exists %}disabled style="opacity:0.4"{% endif %}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                        Start Evaluation
-                    </button>
-                    <button class="btn btn-secondary" type="button" onclick="cancelCustom()">← Back</button>
-                </div>
-            </form>
-        </div>
+    <!-- Summary table -->
+    <div class="card" style="margin-bottom:1.5rem;overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+                <tr style="border-bottom:1px solid var(--border);">
+                    <th style="text-align:left;padding:10px 12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:10px;">Method</th>
+                    <th style="text-align:right;padding:10px 12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:10px;">Mean Reward</th>
+                    <th style="text-align:right;padding:10px 12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:10px;">Std Reward</th>
+                    <th style="text-align:right;padding:10px 12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:10px;">Avg Latency</th>
+                    <th style="text-align:right;padding:10px 12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:10px;">SLA Violations</th>
+                    <th style="text-align:right;padding:10px 12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:10px;">Avg CPU %</th>
+                </tr>
+            </thead>
+            <tbody id="results-tbody"></tbody>
+        </table>
     </div>
 
-    <!-- Evaluation Progress & Results -->
-    <div id="eval-progress-section" style="display:none;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 12px;">
-            <div>
-                <h2 style="font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1.3rem;">Evaluation in Progress</h2>
-                <div id="eval-status-badge" class="badge badge-running" style="margin-top: 6px;">
-                    <span class="pulse"></span> <span id="eval-status-text">Running...</span>
-                </div>
-            </div>
-            <a class="btn btn-secondary" href="/evaluate" id="eval-reset-btn" style="display:none;">← Evaluate Again</a>
-        </div>
+    <!-- DQN action distribution -->
+    <div id="dqn-diag-panel" style="display:none;margin-bottom:1.5rem;"></div>
 
-        <!-- Overall progress -->
-        <div class="card" style="margin-bottom: 1.5rem;">
-            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); margin-bottom: 8px;">
-                <span>Overall progress (all 4 methods)</span>
-                <span id="eval-pct">0%</span>
-            </div>
-            <div class="progress-bar-wrapper">
-                <div class="progress-bar-fill" id="eval-progress-bar" style="width: 0%;"></div>
-            </div>
-        </div>
-
-        <!-- Method progress indicators -->
-        <div class="grid-4" style="margin-bottom: 1.5rem;">
-            <div class="stat-block" id="method-dqn-block">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                    <span class="method-dot method-dqn"></span>
-                    <span class="stat-label" style="margin:0;">DQN Agent</span>
-                </div>
-                <div class="stat-value accent" id="method-dqn-ep">—</div>
-                <div class="stat-sub">episodes done</div>
-            </div>
-            <div class="stat-block">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                    <span class="method-dot method-random"></span>
-                    <span class="stat-label" style="margin:0;">Random</span>
-                </div>
-                <div class="stat-value" style="color: var(--accent3);" id="method-random-ep">—</div>
-                <div class="stat-sub">episodes done</div>
-            </div>
-            <div class="stat-block">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                    <span class="method-dot method-rr"></span>
-                    <span class="stat-label" style="margin:0;">Round Robin</span>
-                </div>
-                <div class="stat-value" style="color: var(--accent2);" id="method-rr-ep">—</div>
-                <div class="stat-sub">episodes done</div>
-            </div>
-            <div class="stat-block">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                    <span class="method-dot method-lc"></span>
-                    <span class="stat-label" style="margin:0;">Least Conn.</span>
-                </div>
-                <div class="stat-value" style="color: var(--green);" id="method-lc-ep">—</div>
-                <div class="stat-sub">episodes done</div>
-            </div>
-        </div>
-
-        <!-- Live charts -->
-        <div class="grid-2" style="margin-bottom: 1.5rem;">
-            <div class="chart-box">
-                <div class="chart-title">Cumulative Reward per Episode — All Methods</div>
-                <canvas id="eval-reward-chart" height="200"></canvas>
-            </div>
-            <div class="chart-box">
-                <div class="chart-title">Average Latency per Episode — All Methods</div>
-                <canvas id="eval-latency-chart" height="200"></canvas>
-            </div>
-        </div>
-
-        <div class="grid-2" style="margin-bottom: 1.5rem;">
-            <div class="chart-box">
-                <div class="chart-title">SLA Violations per Episode</div>
-                <canvas id="eval-sla-chart" height="200"></canvas>
-            </div>
-            <div class="chart-box">
-                <div class="chart-title">Average CPU Utilization per Episode</div>
-                <canvas id="eval-cpu-chart" height="200"></canvas>
-            </div>
-        </div>
-
-        <!-- Summary table — shown after completion -->
-        <div id="eval-summary" style="display:none;">
-            <hr class="section-sep">
-            <div class="page-tag">Final Results</div>
-            <h2 style="font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1.3rem; margin-bottom: 1.5rem;">Performance Summary</h2>
-
-            <!-- Winner banner -->
-            <div id="winner-banner" class="alert alert-info" style="margin-bottom: 1.5rem; font-size: 13px; font-weight: 500;"></div>
-
-            <!-- Summary stats -->
-            <div class="card" style="margin-bottom: 1.5rem; overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                    <thead>
-                        <tr style="border-bottom: 1px solid var(--border);">
-                            <th style="text-align: left; padding: 10px 12px; color: var(--text-dim); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px;">Method</th>
-                            <th style="text-align: right; padding: 10px 12px; color: var(--text-dim); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px;">Mean Reward</th>
-                            <th style="text-align: right; padding: 10px 12px; color: var(--text-dim); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px;">Std Reward</th>
-                            <th style="text-align: right; padding: 10px 12px; color: var(--text-dim); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px;">Avg Latency</th>
-                            <th style="text-align: right; padding: 10px 12px; color: var(--text-dim); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px;">SLA Violations</th>
-                            <th style="text-align: right; padding: 10px 12px; color: var(--text-dim); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px;" title="queue/capacity ratio">Avg CPU %</th>
-                            <th style="text-align: right; padding: 10px 12px; color: var(--text-dim); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px;" title="avg active servers">Avg Servers</th>
-                        </tr>
-                    </thead>
-                    <tbody id="summary-tbody">
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Bar chart comparison -->
-            <div class="grid-2" style="margin-bottom: 1.5rem;">
-                <div class="chart-box">
-                    <div class="chart-title">Mean Reward Comparison</div>
-                    <canvas id="bar-reward-chart" height="200"></canvas>
-                </div>
-                <div class="chart-box">
-                    <div class="chart-title">SLA Violation Count Comparison</div>
-                    <canvas id="bar-sla-chart" height="200"></canvas>
-                </div>
-            </div>
-
-            <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 1rem;">
-                <a class="btn btn-primary" href="/evaluate">Evaluate Again</a>
-                <a class="btn btn-secondary" href="/">← Home</a>
-                <a class="btn btn-secondary" href="/train">Train New Model</a>
-            </div>
-        </div>
-
-        <!-- Error display -->
-        <div id="eval-error-box" style="display:none;" class="alert alert-error">
-            <pre id="eval-error-text" style="font-size: 11px; white-space: pre-wrap; overflow: auto;"></pre>
-        </div>
+    <!-- Comparison charts -->
+    <div class="grid-2">
+        <div class="chart-box"><div class="chart-title">Mean Reward Comparison</div><canvas id="bar-reward" height="220"></canvas></div>
+        <div class="chart-box"><div class="chart-title">SLA Violation Count Comparison</div><canvas id="bar-sla" height="220"></canvas></div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script>
+var pollInterval = null;
+var episodesPerMethod = 300;
+var COLORS = {dqn:'#00e5ff', random:'#ff6b35', round_robin:'#7c4dff', least_connections:'#00ff88'};
+var LABELS = {dqn:'DQN Agent', random:'Random', round_robin:'Round Robin', least_connections:'Least Conn.'};
+var rewardChart, latencyChart, slaChart, cpuChart, barReward, barSla;
 
-// ── Eval parametric guidance ───────────────────────────────────────────────
-function eiv(id) { var el = document.getElementById('e_' + id); return el ? (parseFloat(el.value)||0) : 0; }
-function ebv(id) { var el = document.getElementById(id); return el ? el.checked : false; }
-function setEHint(id, html) { var el = document.getElementById('eh_' + id); if (el) el.innerHTML = html; }
+// ── On load ───────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+    // Load model info
+    try {
+        var r = await fetch('/api/model_meta');
+        var m = await r.json();
+        if (m.has_meta) {
+            document.getElementById('model-banner').style.display = 'block';
+            document.getElementById('model-banner').innerHTML =
+                '🧠 Loaded model: <b>' + m.num_servers + ' heterogeneous servers</b>' +
+                ' · state_size=' + m.state_size + ' (includes per-server speeds)' +
+                ' · action_size=' + m.action_size + ' · hidden_dim=' + m.hidden_dim +
+                '<br><span style="color:var(--text-dim);font-size:10px;">Each evaluation run uses freshly randomised server speeds. ' +
+                'DQN observes speeds in state — LC/RR/Random do not.</span>';
+            // Pre-fill SERVER_COUNT from model
+            var scEl = document.getElementById('e_SERVER_COUNT_display');
+            if (scEl) scEl.textContent = m.num_servers;
+        } else {
+            document.getElementById('no-model-banner').style.display = 'block';
+            // Disable start button but keep page accessible
+            var startBtn = document.querySelector('button[onclick="startEval()"]');
+            if (startBtn) { startBtn.disabled = true; startBtn.title = 'Train a model first'; }
+        }
+    } catch(e) { document.getElementById('no-model-banner').style.display = 'block'; }
 
-function statusChipE(ok, text) {
-    var color=ok?'var(--green)':'var(--red)', bg=ok?'rgba(0,255,136,0.08)':'rgba(255,59,92,0.08)', border=ok?'rgba(0,255,136,0.25)':'rgba(255,59,92,0.25)';
-    return '<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:'+bg+';color:'+color+';border:1px solid '+border+';font-weight:600;">'+(ok?'✓':'✗')+' '+text+'</span>';
-}
+    // Auto-fill config from training params
+    loadTrainConfig();
 
-function computeEvalGuidance() {
-    var lambda    = eiv('AVG_INCOMING_REQUESTS');
-    var workload  = eiv('AVG_REQUEST_WORKLOAD');
-    var maxServer = eiv('MAX_SERVER_COUNT');
-    var procPower = eiv('PROCESSING_POWER');
-    var slaThresh = eiv('SLA_VIOLATION_LATENCY');
-    var epLen     = eiv('EPISODE_LENGTH');
-    var episodes  = eiv('TEST_EPISODE_COUNT');
-    var autoscale = ebv('eval-autoscale-toggle');
-
-    // hidden fields
-    var hiddenMaxQ  = parseFloat((document.querySelector('input[name="MAX_QUEUE_LENGTH"]')||{}).value||200);
-    var hiddenServers = parseFloat((document.querySelector('input[name="SERVER_COUNT"]')||{}).value||10);
-
-    var avgArrival   = lambda * workload;
-    var throughput   = maxServer * procPower;
-    var utilPct      = throughput > 0 ? (avgArrival / throughput * 100) : 999;
-    var slaRatio     = hiddenMaxQ > 0 ? (slaThresh / hiddenMaxQ * 100) : 0;
-
-    setEHint('AVG_INCOMING_REQUESTS',
-        'Poisson(λ=' + lambda + ') requests/step → avg <b>' + avgArrival.toFixed(0) + ' CPU/step</b>. ' +
-        'Fleet throughput = <b>' + throughput + ' CPU/step</b>. Load = <b>' + utilPct.toFixed(0) + '%</b>. ' +
-        statusChipE(utilPct < 90, utilPct < 90 ? (utilPct < 50 ? 'light' : 'moderate') : 'overloaded') +
-        '<br>Recommended λ for ~70% load: <b>' + Math.max(1, Math.floor(throughput * 0.7 / Math.max(1,workload))) + '</b>.'
-    );
-
-    setEHint('AVG_REQUEST_WORKLOAD',
-        'Each request adds <b>' + workload + ' CPU</b> to a server queue. ' +
-        'Max sustainable workload at λ=' + lambda + ': <b>' + (throughput / Math.max(1,lambda)).toFixed(1) + ' CPU/req</b>. ' +
-        statusChipE(avgArrival <= throughput, avgArrival <= throughput ? 'ok' : 'arrival exceeds throughput') +
-        '<br>Tip: keep between 0.5×–2× PROCESSING_POWER = <b>' + (procPower*0.5).toFixed(0) + '–' + (procPower*2) + '</b>.'
-    );
-
-    setEHint('SLA_VIOLATION_LATENCY',
-        'SLA triggers when avg queue > <b>' + slaThresh + '</b> (= ' + slaRatio.toFixed(0) + '% of queue cap ' + hiddenMaxQ + '). ' +
-        'Recommended: 20–60% of MAX_QUEUE_LENGTH = <b>' + (hiddenMaxQ*0.2).toFixed(0) + '–' + (hiddenMaxQ*0.6).toFixed(0) + '</b>. ' +
-        statusChipE(slaThresh > procPower && slaThresh < hiddenMaxQ * 0.8,
-            slaThresh > procPower && slaThresh < hiddenMaxQ * 0.8 ? 'ok' : 'adjust to '+(hiddenMaxQ*0.2).toFixed(0)+'–'+(hiddenMaxQ*0.6).toFixed(0))
-    );
-
-    setEHint('TEST_EPISODE_COUNT',
-        '<b>' + episodes + ' episodes × ' + epLen + ' steps = ' + (episodes*epLen).toLocaleString() + ' total eval steps per method</b> (×4 methods). ' +
-        'More episodes = tighter confidence intervals. Recommended ≥ 50 for stable statistics. ' +
-        statusChipE(episodes >= 50, episodes >= 50 ? 'ok' : 'consider ≥ 50 for reliable results')
-    );
-
-    setEHint('EPISODE_LENGTH',
-        '<b>' + epLen + ' steps/episode</b>. At λ=' + lambda + ', ~' + (lambda*epLen).toFixed(0) + ' requests/episode. ' +
-        'Should match the training episode length for a fair DQN comparison. ' +
-        'Long enough to observe queue dynamics (recommended ≥ 200 steps).' +
-        statusChipE(epLen >= 200, epLen >= 200 ? '' : ' — increase to ≥ 200')
-    );
-
-    setEHint('PROCESSING_POWER',
-        'Each server drains <b>' + procPower + ' CPU/step</b>. Fleet total = <b>' + throughput + ' CPU/step</b>. ' +
-        'Net queue change per step: ' + (avgArrival > throughput ? '+' : '') + (avgArrival - throughput).toFixed(0) + ' CPU. ' +
-        statusChipE(throughput >= avgArrival, throughput >= avgArrival ? 'queues stable' : 'queues growing — increase processing or reduce load')
-    );
-
-    // Health panel
-    var checks = [
-        { label:'Throughput vs load', val: avgArrival.toFixed(0)+' arriving / '+throughput+' capacity ('+utilPct.toFixed(0)+'%)', ok: utilPct<90,
-          tip: utilPct>=90 ? 'Reduce AVG_INCOMING_REQUESTS or increase PROCESSING_POWER / MAX_SERVER_COUNT' : null },
-        { label:'SLA placement', val: 'SLA='+slaThresh+', queue cap='+hiddenMaxQ+' ('+slaRatio.toFixed(0)+'%)', ok: slaThresh < hiddenMaxQ*0.8 && slaThresh > procPower,
-          tip: slaThresh >= hiddenMaxQ*0.8 ? 'Increase MAX_QUEUE_LENGTH to ≥ '+(slaThresh*3) : (slaThresh<=procPower ? 'Raise SLA above processing_power ('+procPower+')' : null) },
-        { label:'Episode count', val: episodes+' episodes', ok: episodes>=50, tip: episodes<50 ? 'Use ≥ 50 episodes for reliable statistics' : null },
-        { label:'Episode length', val: epLen+' steps', ok: epLen>=200, tip: epLen<200 ? 'Increase to ≥ 200 steps to see queue dynamics' : null },
-    ];
-
-    var passCount = checks.filter(function(c){return c.ok;}).length;
-    var panel = document.getElementById('eval-health-rows');
-    if (!panel) return;
-
-    var html = checks.map(function(c) {
-        var color=c.ok?'var(--green)':'var(--red)', bg=c.ok?'rgba(0,255,136,0.04)':'rgba(255,59,92,0.04)', border=c.ok?'rgba(0,255,136,0.15)':'rgba(255,59,92,0.2)';
-        return '<div style="display:flex;gap:12px;padding:7px 12px;border-radius:6px;background:'+bg+';border:1px solid '+border+';">'+
-            '<span style="color:'+color+';flex-shrink:0;">'+(c.ok?'✓':'✗')+'</span>'+
-            '<div><span style="font-size:11px;font-weight:500;color:var(--text);">'+c.label+'</span>'+
-            ' <span style="font-size:11px;color:'+color+';font-family:JetBrains Mono;">'+c.val+'</span>'+
-            (c.tip ? '<div style="font-size:10px;color:var(--yellow);margin-top:2px;">→ '+c.tip+'</div>' : '')+
-            '</div></div>';
-    }).join('');
-
-    var sc = passCount===checks.length?'var(--green)':passCount>=3?'var(--yellow)':'var(--red)';
-    panel.innerHTML = '<div style="font-size:11px;padding:7px 12px;border-radius:6px;background:rgba(0,0,0,0.2);color:'+sc+';font-weight:500;margin-bottom:6px;">'+
-        passCount+'/'+checks.length+' checks passed</div>' + html;
-}
-
-function attachEvalListeners() {
-    ['e_AVG_INCOMING_REQUESTS','e_AVG_REQUEST_WORKLOAD','e_SLA_VIOLATION_LATENCY',
-     'e_TEST_EPISODE_COUNT','e_EPISODE_LENGTH','e_MAX_SERVER_COUNT','e_PROCESSING_POWER'].forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) { el.addEventListener('input', computeEvalGuidance); el.addEventListener('change', computeEvalGuidance); }
-    });
-    var toggle = document.getElementById('eval-autoscale-toggle');
-    if (toggle) toggle.addEventListener('change', computeEvalGuidance);
-}
-// ── End eval guidance ──────────────────────────────────────────────────────
-
-// Format CPU utilization intelligently — more decimals for small values
-function formatCpu(val) {
-    var pct = val * 100;
-    var color = pct < 1 ? 'var(--green)' : pct > 80 ? 'var(--red)' : 'var(--text)';
-    var display = pct < 0.1 ? pct.toFixed(3) : pct < 1 ? pct.toFixed(2) : pct.toFixed(1);
-    var note = pct < 1 ? ' <span style="font-size:9px;color:var(--green);" title="Servers lightly loaded — queues near empty (efficient)">[low]</span>' : '';
-    return '<span style="color:' + color + ';">' + display + '%' + note + '</span>';
-}
-
-let evalRewardChart, evalLatencyChart, evalSlaChart, evalCpuChart;
-let evalPollInterval;
-const METHOD_COLORS = {
-    dqn: '#00e5ff',
-    random: '#ff6b35',
-    round_robin: '#7c4dff',
-    least_connections: '#00ff88',
-};
-const METHOD_LABELS = {
-    dqn: 'DQN Agent',
-    random: 'Random',
-    round_robin: 'Round Robin',
-    least_connections: 'Least Conn.',
-};
-
-// Autoscale label
-const toggleEl = document.getElementById('eval-autoscale-toggle');
-if (toggleEl) {
-    toggleEl.addEventListener('change', function() {
-        document.getElementById('eval-autoscale-label').textContent = this.checked ? 'Enabled' : 'Disabled';
-    });
-}
-
-function selectParams(mode) {
-    document.getElementById('param-choice-section').style.display = 'none';
-    if (mode === 'custom') {
-        document.getElementById('custom-params-section').style.display = 'block';
-        attachEvalListeners();
-        computeEvalGuidance();
-    } else {
-        // Use training params from server
-        fetch('/api/get_train_config')
-            .then(r => r.json())
-            .then(cfg => {
-                startEvaluation(cfg);
-            });
-    }
-}
-
-function cancelCustom() {
-    document.getElementById('custom-params-section').style.display = 'none';
-    document.getElementById('param-choice-section').style.display = 'block';
-}
-
-// Custom form submission
-document.getElementById('eval-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const cfg = {};
-    for (const [k, v] of formData.entries()) {
-        if (k === 'AUTOSCALING') cfg[k] = true;
-        else if (['SERVER_COUNT','MIN_SERVER_COUNT','MAX_SERVER_COUNT','AVG_INCOMING_REQUESTS',
-                   'AVG_REQUEST_WORKLOAD','REQUEST_WORKLOAD_VARIANCE','MAX_SERVER_UTILIZATION',
-                   'PROCESSING_POWER','MAX_QUEUE_LENGTH','SLA_VIOLATION_LATENCY','EPISODE_LENGTH',
-                   'TEST_EPISODE_COUNT','TRAIN_EPISODE_COUNT','BATCH_SIZE','REPLAY_BUFFER_SIZE',
-                   'TARGET_UPDATE_STEPS','HIDDEN_DIM'].includes(k))
-            cfg[k] = parseInt(v);
-        else cfg[k] = parseFloat(v);
-    }
-    if (!cfg.AUTOSCALING) cfg.AUTOSCALING = false;
-    startEvaluation(cfg);
+    // Resume poll if running
+    try {
+        var r2 = await fetch('/api/evaluation_status');
+        var d2 = await r2.json();
+        if (d2.running || (d2.progress > 0 && !d2.done)) {
+            initCharts(); startPolling(); updateEvalUI(d2);
+        }
+    } catch(e) {}
 });
 
-async function startEvaluation(cfg) {
-    document.getElementById('param-choice-section').style.display = 'none';
-    document.getElementById('custom-params-section').style.display = 'none';
-    document.getElementById('eval-progress-section').style.display = 'block';
-
-    initEvalCharts();
-
-    const resp = await fetch('/api/start_evaluation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg),
-    });
-
-    if (resp.ok) {
-        evalPollInterval = setInterval(pollEvalStatus, 2000);
-    }
+async function loadTrainConfig() {
+    try {
+        var r   = await fetch('/api/get_train_config');
+        var cfg = await r.json();
+        // Populate all editable fields from training config
+        var map = {
+            'TEST_EPISODE_COUNT':      'e_TEST_EPISODE_COUNT',
+            'EPISODE_LENGTH':          'e_EPISODE_LENGTH',
+            'AVG_INCOMING_REQUESTS':   'e_AVG_INCOMING_REQUESTS',
+            'AVG_REQUEST_WORKLOAD':    'e_AVG_REQUEST_WORKLOAD',
+            'REQUEST_WORKLOAD_VARIANCE':'e_REQUEST_WORKLOAD_VARIANCE',
+            'PROCESSING_POWER':        'e_PROCESSING_POWER',
+            'MAX_QUEUE_LENGTH':        'e_MAX_QUEUE_LENGTH',
+            'SLA_VIOLATION_LATENCY':   'e_SLA_VIOLATION_LATENCY',
+        };
+        for (var k in map) {
+            var el = document.getElementById(map[k]);
+            if (el && cfg[k] !== undefined) el.value = cfg[k];
+        }
+        // Get SERVER_COUNT from model weights (ground truth — cannot be changed)
+        var mr = await fetch('/api/model_meta');
+        var mm = await mr.json();
+        var nSrv = mm.has_meta ? mm.num_servers : (cfg.SERVER_COUNT || 10);
+        // Update hidden input and display
+        var hiddenEl = document.getElementById('e_SERVER_COUNT');
+        if (hiddenEl) hiddenEl.value = nSrv;
+        var dispEl = document.getElementById('e_SERVER_COUNT_display');
+        if (dispEl) dispEl.textContent = nSrv + ' servers';
+    } catch(e) { console.warn('Could not load train config:', e); }
 }
 
-function initEvalCharts() {
-    const methods = ['dqn', 'random', 'round_robin', 'least_connections'];
-    const base = {
-        responsive: true,
-        animation: false,
-        plugins: {
-            legend: {
-                labels: { color: '#6b7590', font: { family: 'JetBrains Mono', size: 9 }, boxWidth: 10 }
-            }
-        },
-        scales: {
-            x: { ticks: { color: '#6b7590', font: { family: 'JetBrains Mono', size: 9 } }, grid: { color: '#1e2330' } },
-            y: { ticks: { color: '#6b7590', font: { family: 'JetBrains Mono', size: 9 } }, grid: { color: '#1e2330' } }
-        }
+function collectEvalConfig() {
+    function iv(id) { var e = document.getElementById(id); return e ? parseFloat(e.value) || 0 : 0; }
+    return {
+        SERVER_COUNT:            iv('e_SERVER_COUNT') || 10,
+        TEST_EPISODE_COUNT:      iv('e_TEST_EPISODE_COUNT') || 300,
+        EPISODE_LENGTH:          iv('e_EPISODE_LENGTH') || 500,
+        AVG_INCOMING_REQUESTS:   iv('e_AVG_INCOMING_REQUESTS') || 5,
+        AVG_REQUEST_WORKLOAD:    iv('e_AVG_REQUEST_WORKLOAD') || 10,
+        REQUEST_WORKLOAD_VARIANCE: iv('e_REQUEST_WORKLOAD_VARIANCE') || 5,
+        PROCESSING_POWER:        iv('e_PROCESSING_POWER') || 10,
+        MAX_QUEUE_LENGTH:        iv('e_MAX_QUEUE_LENGTH') || 200,
+        SLA_VIOLATION_LATENCY:   iv('e_SLA_VIOLATION_LATENCY') || 80,
+        MAX_SERVER_UTILIZATION:  100,   // fixed — not user-configurable
     };
-
-    function makeDatasets(key) {
-        return methods.map(m => ({
-            label: METHOD_LABELS[m],
-            data: [],
-            borderColor: METHOD_COLORS[m],
-            backgroundColor: METHOD_COLORS[m] + '18',
-            borderWidth: 1.5,
-            pointRadius: 0,
-            tension: 0.3,
-        }));
-    }
-
-    evalRewardChart = new Chart(document.getElementById('eval-reward-chart'), {
-        type: 'line',
-        data: { labels: [], datasets: makeDatasets('rewards') },
-        options: base,
-    });
-
-    evalLatencyChart = new Chart(document.getElementById('eval-latency-chart'), {
-        type: 'line',
-        data: { labels: [], datasets: makeDatasets('avg_latency') },
-        options: base,
-    });
-
-    evalSlaChart = new Chart(document.getElementById('eval-sla-chart'), {
-        type: 'line',
-        data: { labels: [], datasets: makeDatasets('sla_violations') },
-        options: base,
-    });
-
-    evalCpuChart = new Chart(document.getElementById('eval-cpu-chart'), {
-        type: 'line',
-        data: { labels: [], datasets: makeDatasets('cpu_utilization') },
-        options: base,
-    });
 }
 
-function updateLineChart(chart, metricsMap, key) {
-    const methods = ['dqn', 'random', 'round_robin', 'least_connections'];
-    let maxLen = 0;
-    methods.forEach((m, i) => {
-        const d = metricsMap[m]?.[key] || [];
-        chart.data.datasets[i].data = d;
-        maxLen = Math.max(maxLen, d.length);
+async function startEval() {
+    var cfg = collectEvalConfig();
+    episodesPerMethod = cfg.TEST_EPISODE_COUNT;
+    initCharts();
+    document.getElementById('results-section').style.display = 'none';
+    document.getElementById('error-box').style.display = 'none';
+    var r = await fetch('/api/start_evaluation', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)
     });
-    chart.data.labels = Array.from({ length: maxLen }, (_, i) => i + 1);
-    chart.update('none');
+    startPolling();
 }
 
-async function pollEvalStatus() {
-    const resp = await fetch('/api/evaluation_status');
-    const data = await resp.json();
+function startPolling() {
+    if (pollInterval) return;
+    pollInterval = setInterval(async () => {
+        try {
+            var r = await fetch('/api/evaluation_status');
+            var d = await r.json();
+            updateEvalUI(d);
+        } catch(e) {}
+    }, 1500);
+}
 
-    document.getElementById('eval-pct').textContent = data.progress + '%';
-    document.getElementById('eval-progress-bar').style.width = data.progress + '%';
+function updateEvalUI(data) {
+    var metrics = data.step_metrics || {};
+    var methods = ['dqn','random','round_robin','least_connections'];
+    var cntIds  = {dqn:'cnt-dqn', random:'cnt-random', round_robin:'cnt-rr', least_connections:'cnt-lc'};
+    var metricKeys = {
+        rewardChart:  'rewards',
+        latencyChart: 'avg_latency',
+        slaChart:     'sla_violations',
+        cpuChart:     'cpu_utilization'
+    };
+    var charts = {rewardChart: rewardChart, latencyChart: latencyChart, slaChart: slaChart, cpuChart: cpuChart};
 
-    const sm = data.step_metrics;
-    if (sm) {
-        const methodMap = { dqn: 'method-dqn-ep', random: 'method-random-ep', round_robin: 'method-rr-ep', least_connections: 'method-lc-ep' };
-        for (const [m, elId] of Object.entries(methodMap)) {
-            const eps = sm[m]?.rewards?.length || 0;
-            document.getElementById(elId).textContent = eps;
-        }
+    // Update episode counters
+    methods.forEach(function(m) {
+        var cnt = (metrics[m] && metrics[m].rewards) ? metrics[m].rewards.length : 0;
+        document.getElementById(cntIds[m]).textContent = cnt;
+    });
 
-        updateLineChart(evalRewardChart, sm, 'rewards');
-        updateLineChart(evalLatencyChart, sm, 'avg_latency');
-        updateLineChart(evalSlaChart, sm, 'sla_violations');
-        updateLineChart(evalCpuChart, sm, 'cpu_utilization');
-    }
+    // Update all 4 live charts — each method is its own dataset
+    // Labels = episode numbers based on the longest dataset
+    var maxLen = 0;
+    methods.forEach(function(m) {
+        var r = (metrics[m] && metrics[m].rewards) ? metrics[m].rewards.length : 0;
+        if (r > maxLen) maxLen = r;
+    });
+    var labels = [];
+    for (var i = 1; i <= maxLen; i++) labels.push(i);
+
+    Object.keys(metricKeys).forEach(function(chartName) {
+        var chart = charts[chartName];
+        var key   = metricKeys[chartName];
+        if (!chart) return;
+        chart.data.labels = labels;
+        methods.forEach(function(m, mi) {
+            var vals = (metrics[m] && metrics[m][key]) ? metrics[m][key] : [];
+            chart.data.datasets[mi].data = vals;
+        });
+        chart.update('none');
+    });
 
     if (data.error) {
-        document.getElementById('eval-status-text').textContent = 'Error';
-        document.getElementById('eval-status-badge').className = 'badge badge-error';
-        document.getElementById('eval-error-box').style.display = 'flex';
-        document.getElementById('eval-error-text').textContent = data.error;
-        clearInterval(evalPollInterval);
-        document.getElementById('eval-reset-btn').style.display = 'inline-flex';
-    } else if (data.done) {
-        document.getElementById('eval-status-text').textContent = 'Complete';
-        document.getElementById('eval-status-badge').className = 'badge badge-done';
-        document.getElementById('eval-reset-btn').style.display = 'inline-flex';
-        clearInterval(evalPollInterval);
-        renderSummary(data.results);
-    } else {
-        document.getElementById('eval-status-text').textContent = `Running... ${data.progress}%`;
+        document.getElementById('error-box').style.display = 'block';
+        var errMsg = data.error || '';
+        var friendly = '';
+        if (errMsg.indexOf('SERVER_COUNT mismatch') >= 0) {
+            friendly = '⚠ Stale model detected. Your saved model was trained with a different server count. ' +
+                'Please delete <code>artifacts/dqn_trained_model.pth</code> and ' +
+                '<a href="/train" style="color:var(--accent);">retrain the model</a> with your current settings.';
+        } else if (errMsg.indexOf('No trained model') >= 0 || errMsg.indexOf('No such file') >= 0) {
+            friendly = '⚠ No trained model found. <a href="/train" style="color:var(--accent);">Train a model first →</a>';
+        } else {
+            friendly = '⚠ Evaluation error — see details below.';
+        }
+        document.getElementById('error-friendly').innerHTML = friendly;
+        document.getElementById('error-text').textContent   = errMsg;
+    }
+
+    if (data.done && data.results) {
+        clearInterval(pollInterval); pollInterval = null;
+        renderSummary(data.results, data);
     }
 }
 
-function renderSummary(results) {
-    document.getElementById('eval-summary').style.display = 'block';
+function renderSummary(results, evalData) {
+    document.getElementById('results-section').style.display = 'block';
+    var methods = ['dqn','random','round_robin','least_connections'];
+    var methodColors = {dqn:'var(--accent)', random:'var(--accent3)', round_robin:'var(--accent2)', least_connections:'var(--green)'};
+    var methodNames  = {dqn:'DQN Agent', random:'Random', round_robin:'Round Robin', least_connections:'Least Conn.'};
 
-    const methods = ['dqn', 'random', 'round_robin', 'least_connections'];
-    const sorted = [...methods].sort((a, b) => (results[b]?.mean_reward || 0) - (results[a]?.mean_reward || 0));
-    const winner = sorted[0];
-
+    // Find winner
+    var best = methods.reduce(function(a,b){ return (results[a]||{mean_reward:-Infinity}).mean_reward > (results[b]||{mean_reward:-Infinity}).mean_reward ? a : b; });
     document.getElementById('winner-banner').innerHTML =
-        `🏆 Best performing strategy: <strong>${METHOD_LABELS[winner]}</strong> — Mean Reward: ${results[winner]?.mean_reward?.toFixed(1)}`;
+        '🏆 Best performing strategy: <b style="color:' + methodColors[best] + '">' + methodNames[best] + '</b> — Mean Reward: <b>' + (results[best]||{}).mean_reward + '</b>';
 
-    const tbody = document.getElementById('summary-tbody');
+    // Table
+    var tbody = document.getElementById('results-tbody');
     tbody.innerHTML = '';
-
-    sorted.forEach((m, rank) => {
-        const r = results[m] || {};
-        const isDqn = m === 'dqn';
-        const row = document.createElement('tr');
+    methods.forEach(function(m) {
+        var r   = results[m];
+        if (!r) return;
+        var row = document.createElement('tr');
         row.style.borderBottom = '1px solid var(--border)';
-        if (rank === 0) row.style.background = 'rgba(0,229,255,0.04)';
-        row.innerHTML = `
-            <td style="padding: 12px; display: flex; align-items: center; gap: 10px;">
-                <span class="method-dot" style="background: ${METHOD_COLORS[m]}"></span>
-                <span style="${isDqn ? 'color: var(--accent); font-weight: 500;' : ''}">${METHOD_LABELS[m]}</span>
-                ${rank === 0 ? '<span style="font-size: 10px; color: var(--yellow);">★ BEST</span>' : ''}
-            </td>
-            <td style="padding: 12px; text-align: right; font-family: JetBrains Mono; color: ${(r.mean_reward||0) >= 0 ? 'var(--green)' : 'var(--red)'};">
-                ${(r.mean_reward||0).toFixed(1)}
-            </td>
-            <td style="padding: 12px; text-align: right; font-family: JetBrains Mono; color: var(--text-dim);">
-                ±${(r.std_reward||0).toFixed(1)}
-            </td>
-            <td style="padding: 12px; text-align: right; font-family: JetBrains Mono; color: var(--text);">
-                ${(r.mean_latency||0).toFixed(2)}
-            </td>
-            <td style="padding: 12px; text-align: right; font-family: JetBrains Mono; color: ${(r.total_sla_violations||0) > 100 ? 'var(--red)' : 'var(--text)'};">
-                ${r.total_sla_violations||0}
-            </td>
-            <td style="padding: 12px; text-align: right; font-family: JetBrains Mono; color: var(--text);">
-                ${formatCpu(r.mean_cpu||0)}
-            </td>
-            <td style="padding: 12px; text-align: right; font-family: JetBrains Mono; color: var(--accent2);">
-                ${(r.mean_servers||0).toFixed(1)}
-            </td>
-        `;
+        var isBest = m === best;
+        row.innerHTML =
+            '<td style="padding:12px;"><span style="color:' + methodColors[m] + ';font-weight:600;">' + methodNames[m] + (isBest ? ' <span class="badge badge-done" style="font-size:9px;margin-left:4px;">BEST</span>' : '') + '</span></td>' +
+            '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;' + (isBest?'color:var(--green);font-weight:700;':'color:var(--red);') + '">' + r.mean_reward + '</td>' +
+            '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;color:var(--text-dim);">±' + r.std_reward + '</td>' +
+            '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;font-weight:700;">' + r.avg_latency + '</td>' +
+            '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;' + (r.sla_violations > 0 ? 'color:var(--red);font-weight:700;' : 'color:var(--green);') + '">' + r.sla_violations + '</td>' +
+            '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;">' + r.avg_cpu + '%</td>';
         tbody.appendChild(row);
     });
 
-    // Bar charts
-    const barBase = {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-            x: { ticks: { color: '#6b7590', font: { family: 'JetBrains Mono', size: 9 } }, grid: { color: '#1e2330' } },
-            y: { ticks: { color: '#6b7590', font: { family: 'JetBrains Mono', size: 9 } }, grid: { color: '#1e2330' } }
-        }
+    // DQN action distribution
+    renderDqnDiagnostics(evalData);
+
+    // Comparison bar charts
+    var labels  = methods.map(function(m){ return methodNames[m]; });
+    var rewards = methods.map(function(m){ return (results[m]||{}).mean_reward || 0; });
+    var slas    = methods.map(function(m){ return (results[m]||{}).sla_violations || 0; });
+    var bcolors = methods.map(function(m){ return COLORS[m]; });
+
+    if (barReward) barReward.destroy();
+    barReward = new Chart(document.getElementById('bar-reward'), {
+        type:'bar', data:{labels:labels,datasets:[{data:rewards,backgroundColor:bcolors,borderRadius:4}]},
+        options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#6b7590'}},y:{ticks:{color:'#6b7590'},grid:{color:'#1e2330'}}}}
+    });
+    if (barSla) barSla.destroy();
+    barSla = new Chart(document.getElementById('bar-sla'), {
+        type:'bar', data:{labels:labels,datasets:[{data:slas,backgroundColor:bcolors,borderRadius:4}]},
+        options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#6b7590'}},y:{ticks:{color:'#6b7590'},grid:{color:'#1e2330'}}}}
+    });
+}
+
+function renderDqnDiagnostics(evalData) {
+    var panel = document.getElementById('dqn-diag-panel');
+    var dist  = evalData ? evalData.dqn_action_dist : null;
+    var n     = evalData ? evalData.dqn_action_size  : 0;
+    if (!dist || !n) { panel.style.display = 'none'; return; }
+
+    var totalSteps = 0, topAction = 0, topCount = 0;
+    for (var k in dist) { totalSteps += dist[k]; if (dist[k] > topCount) { topCount = dist[k]; topAction = parseInt(k); } }
+
+    // Check if routing is spread (healthy) or concentrated (potential issue)
+    var uniqueActions = Object.keys(dist).filter(function(k){ return dist[k] > 0; }).length;
+    var isConcentrated = topCount > totalSteps * 0.6;
+    var bg = isConcentrated ? 'rgba(255,214,0,0.06)' : 'rgba(0,229,255,0.04)';
+    var bd = isConcentrated ? 'rgba(255,214,0,0.25)' : 'rgba(0,229,255,0.15)';
+    var headline = isConcentrated
+        ? '<b style="color:var(--yellow);">Agent concentrates on action ' + topAction + ' (' + (topCount/totalSteps*100).toFixed(1) + '% of steps).</b> ' +
+          'With heterogeneous servers this may be correct — this pair may route to the fastest servers in this episode.'
+        : '<b style="color:var(--green);">DQN distributes across ' + uniqueActions + ' different action pairs.</b> ' +
+          'With heterogeneous speeds, DQN learns to prefer faster server pairs — this is the advantage over classical baselines.';
+
+    // Decode action pairs from evalData action_map
+    var evalAmap = (evalData && evalData.action_map) ? evalData.action_map : null;
+    function evalActionLabel(idx) {
+        if (!evalAmap || idx >= evalAmap.length) return 'A'+idx;
+        var p = evalAmap[idx];
+        return (p[0] === p[1]) ? 'S'+p[0] : 'S'+p[0]+'↔'+p[1];
+    }
+    var maxCount = Math.max.apply(null, Object.values(dist).map(Number).concat([1]));
+    // Sort by count desc, show top 20 to keep UI readable with large action spaces
+    var allEntries = Object.keys(dist).map(function(k){ return {idx:parseInt(k), cnt:dist[k]}; })
+        .sort(function(a,b){ return b.cnt - a.cnt; });
+    var topEntries = allEntries.slice(0, 20);
+    var bars = '';
+    topEntries.forEach(function(e) {
+        var w   = (e.cnt / maxCount * 100).toFixed(0);
+        var lbl = evalActionLabel(e.idx);
+        bars += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">' +
+            '<span style="font-size:9px;color:var(--text-muted);width:54px;text-align:right;flex-shrink:0;">' + lbl + '</span>' +
+            '<div style="flex:1;background:var(--border);border-radius:2px;height:11px;">' +
+            '<div style="width:'+w+'%;background:var(--accent);height:100%;border-radius:2px;"></div></div>' +
+            '<span style="font-size:9px;color:var(--text-dim);width:38px;text-align:right;">'+e.cnt+'</span></div>';
+    });
+    if (allEntries.length > 20) {
+        bars += '<div style="font-size:9px;color:var(--text-muted);margin-top:4px;">… ' + (allEntries.length-20) + ' more pairs not shown</div>';
+    }
+
+    panel.style.display = 'block';
+    panel.innerHTML =
+        '<div style="padding:14px 16px;border-radius:8px;background:'+bg+';border:1px solid '+bd+';">' +
+        '<div style="font-size:11px;font-weight:600;margin-bottom:8px;">DQN Action Analysis (sampled from episode 1)</div>' +
+        '<div style="font-size:11px;margin-bottom:12px;">' + headline + '</div>' +
+        '<div style="display:grid;grid-template-columns:200px 1fr;gap:20px;">' +
+        '<div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:8px;">Step breakdown</div>' +
+        '<div style="font-size:11px;font-family:JetBrains Mono;line-height:2.2;">' +
+        '<span style="color:var(--accent);">Route (action pairs):</span> ' + totalSteps + ' steps (100%)<br>' +
+        '<span style="color:var(--text-dim);">Unique pairs used:</span> ' + uniqueActions + '<br>' +
+        '<span style="color:var(--text-dim);">Top pair:</span> ' + evalActionLabel(topAction) + ' (' + topCount + ' steps)' +
+        '</div></div>' +
+        '<div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:8px;">Action index distribution</div>' +
+        bars + '</div></div></div>';
+}
+
+function initCharts() {
+    var sc = {
+        x: { ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}}, grid:{color:'#1e2330'} },
+        y: { ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}}, grid:{color:'#1e2330'} }
     };
-
-    new Chart(document.getElementById('bar-reward-chart'), {
-        type: 'bar',
-        data: {
-            labels: methods.map(m => METHOD_LABELS[m]),
-            datasets: [{
-                data: methods.map(m => results[m]?.mean_reward || 0),
-                backgroundColor: methods.map(m => METHOD_COLORS[m] + 'bb'),
-                borderColor: methods.map(m => METHOD_COLORS[m]),
-                borderWidth: 1,
-                borderRadius: 4,
-            }]
-        },
-        options: barBase,
-    });
-
-    new Chart(document.getElementById('bar-sla-chart'), {
-        type: 'bar',
-        data: {
-            labels: methods.map(m => METHOD_LABELS[m]),
-            datasets: [{
-                data: methods.map(m => results[m]?.total_sla_violations || 0),
-                backgroundColor: methods.map(m => METHOD_COLORS[m] + 'bb'),
-                borderColor: methods.map(m => METHOD_COLORS[m]),
-                borderWidth: 1,
-                borderRadius: 4,
-            }]
-        },
-        options: barBase,
-    });
+    var methods = ['dqn','random','round_robin','least_connections'];
+    function makeDatasets(prop) {
+        return methods.map(function(m){ return {label:LABELS[m],data:[],borderColor:COLORS[m],borderWidth:1.5,pointRadius:0,tension:.3,fill:false}; });
+    }
+    if (rewardChart)  rewardChart.destroy();
+    if (latencyChart) latencyChart.destroy();
+    if (slaChart)     slaChart.destroy();
+    if (cpuChart)     cpuChart.destroy();
+    rewardChart  = new Chart(document.getElementById('reward-chart'),  {type:'line',data:{labels:[],datasets:makeDatasets('rewards')},  options:{responsive:true,animation:false,plugins:{legend:{position:'top',labels:{color:'#6b7590',font:{size:10}}}},scales:sc}});
+    latencyChart = new Chart(document.getElementById('latency-chart'), {type:'line',data:{labels:[],datasets:makeDatasets('avg_latency')},options:{responsive:true,animation:false,plugins:{legend:{position:'top',labels:{color:'#6b7590',font:{size:10}}}},scales:sc}});
+    slaChart     = new Chart(document.getElementById('sla-chart'),     {type:'line',data:{labels:[],datasets:makeDatasets('sla_violations')},options:{responsive:true,animation:false,plugins:{legend:{position:'top',labels:{color:'#6b7590',font:{size:10}}}},scales:sc}});
+    cpuChart     = new Chart(document.getElementById('cpu-chart'),     {type:'line',data:{labels:[],datasets:makeDatasets('cpu_utilization')},options:{responsive:true,animation:false,plugins:{legend:{position:'top',labels:{color:'#6b7590',font:{size:10}}}},scales:sc}});
 }
 </script>
 {% endblock %}

@@ -11,7 +11,7 @@
             Agentic Load<br>Balancer
         </h1>
         <p style="color: var(--text-dim); font-size: 13px; line-height: 1.7; margin-bottom: 2.5rem; max-width: 480px; margin-left: auto; margin-right: auto;">
-            A DQN-powered cloud load balancing agent that learns to route requests, manage server queues, and dynamically scale infrastructure — evaluated against classical baselines.
+            A DQN-powered cloud load balancing agent trained on a heterogeneous server fleet — where each server has a different processing speed. Classical algorithms like Least Connections ignore server speeds; DQN learns to jointly optimise queue depth and server throughput.
         </p>
 
         <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
@@ -86,14 +86,14 @@
                 <span class="method-dot method-lc" style="margin-top: 4px;"></span>
                 <div>
                     <div style="font-size: 12px; font-weight: 500; margin-bottom: 4px;">Least Connections</div>
-                    <div style="font-size: 11px; color: var(--text-dim); line-height: 1.6;">Routes to the server with the smallest current queue. Greedy, reactive load balancing — strong classical baseline.</div>
+                    <div style="font-size: 11px; color: var(--text-dim); line-height: 1.6;">Routes to the server with the smallest current queue. Strong baseline for identical servers, but ignores server processing speed — a slow server with a short queue can be worse than a fast server with a longer queue.</div>
                 </div>
             </div>
             <div class="card" style="display: flex; gap: 14px; align-items: flex-start;">
                 <span class="method-dot method-dqn" style="margin-top: 4px;"></span>
                 <div>
                     <div style="font-size: 12px; font-weight: 500; margin-bottom: 4px;">DQN Agent</div>
-                    <div style="font-size: 11px; color: var(--text-dim); line-height: 1.6;">Learns a policy via deep Q-learning that considers global state, future consequences, and the cost of SLA violations and server scaling.</div>
+                    <div style="font-size: 11px; color: var(--text-dim); line-height: 1.6;">Observes per-server queue depths <em>and</em> processing speeds. Learns to jointly optimise: route to servers that are fast AND have short queues — impossible for classical baselines without knowing speeds.</div>
                 </div>
             </div>
         </div>

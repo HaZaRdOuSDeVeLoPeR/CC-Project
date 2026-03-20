@@ -1,673 +1,678 @@
 {% extends "base.html" %}
-
 {% block title %}Train Model — RL Load Balancer{% endblock %}
 
 {% block head %}
 <style>
-    .device-card {
-        display: flex; align-items: flex-start; gap: 12px;
-        padding: 12px 14px; border-radius: 8px;
-        border: 1px solid var(--border); background: var(--surface2);
-        cursor: pointer; transition: border-color .2s, background .2s, box-shadow .2s;
-        user-select: none;
-    }
-    .device-card:hover:not(.device-unavailable) { border-color: var(--border-bright); }
-    .device-card.selected {
-        border-color: var(--accent); background: rgba(0,229,255,.06);
-        box-shadow: 0 0 0 1px rgba(0,229,255,.15);
-    }
-    .device-card.device-unavailable { opacity: .38; cursor: not-allowed; }
-    .device-card input[type="radio"] { margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
-    .device-name { font-size: 12px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .device-info { font-size: 10px; color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
-    .device-pill { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
-    .pill-available   { background: rgba(0,255,136,.12); color: var(--green);  border: 1px solid rgba(0,255,136,.25); }
-    .pill-unavailable { background: rgba(107,117,144,.12); color: var(--text-muted); border: 1px solid var(--border); }
-    .pill-best        { background: rgba(0,229,255,.12); color: var(--accent); border: 1px solid rgba(0,229,255,.25); }
-    .device-icon { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; }
-    .icon-gpu { background: rgba(124,77,255,.15); color: var(--accent2); }
-    .icon-cpu { background: rgba(0,229,255,.10);  color: var(--accent);  }
-    .icon-mps { background: rgba(255,107,53,.12); color: var(--accent3); }
-    @keyframes shimmer { 0%,100%{opacity:.4} 50%{opacity:.7} }
+/* ── Device cards ─────────────────────────────────────────────────────────── */
+.device-card {
+    display:flex;align-items:flex-start;gap:12px;padding:12px 14px;
+    border-radius:8px;border:1px solid var(--border);background:var(--surface2);
+    cursor:pointer;transition:border-color .2s,background .2s;user-select:none;
+}
+.device-card:hover { border-color:var(--border-bright); }
+.device-card.selected { border-color:var(--accent);background:rgba(0,229,255,.06); }
+.device-card.device-unavailable { opacity:.38;cursor:not-allowed; }
+.device-card input[type="radio"] { margin-top:2px;accent-color:var(--accent);flex-shrink:0; }
+.device-name { font-size:12px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
+.device-info { font-size:10px;color:var(--text-dim);margin-top:3px;line-height:1.5; }
+.device-pill { font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;border-radius:10px;font-weight:600; }
+.pill-available  { background:rgba(0,255,136,.12);color:var(--green);border:1px solid rgba(0,255,136,.25); }
+.pill-unavailable{ background:rgba(107,117,144,.12);color:var(--text-muted);border:1px solid var(--border); }
+.pill-best       { background:rgba(0,229,255,.12);color:var(--accent);border:1px solid rgba(0,229,255,.25); }
+.device-icon { width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;font-weight:700; }
+.icon-gpu { background:rgba(124,77,255,.15);color:var(--accent2); }
+.icon-cpu { background:rgba(0,229,255,.10);color:var(--accent); }
+.icon-mps { background:rgba(255,107,53,.12);color:var(--accent3); }
+@keyframes shimmer { 0%,100%{opacity:.4} 50%{opacity:.7} }
+
+/* ── Parameter field with validation ────────────────────────────────────── */
+.param-group {
+    margin-bottom:1.2rem;
+}
+.param-label {
+    display:flex;align-items:center;justify-content:space-between;
+    font-size:11px;letter-spacing:.08em;color:var(--text-dim);
+    margin-bottom:6px;text-transform:uppercase;
+}
+.param-input-row { position:relative; }
+.param-input-row .form-input { padding-right:32px; }
+.param-validation-icon {
+    position:absolute;right:10px;top:50%;transform:translateY(-50%);
+    font-size:13px;pointer-events:none;display:none;
+}
+.param-group.valid   .param-validation-icon { display:block;color:var(--green); }
+.param-group.invalid .param-validation-icon { display:block;color:var(--red); }
+.param-group.valid   .form-input { border-color:rgba(0,255,136,.3); }
+.param-group.invalid .form-input { border-color:rgba(255,59,92,.4); }
+
+/* Collapsible hint — uses base.html collapsible classes */
+.param-hint-trigger {
+    display:flex;align-items:center;gap:5px;margin-top:5px;
+    font-size:10px;color:var(--text-muted);cursor:pointer;user-select:none;
+    transition:color .15s;
+}
+.param-hint-trigger:hover { color:var(--text-dim); }
+.param-hint-trigger .arrow { font-size:8px;transition:transform .2s;display:inline-block; }
+.param-hint-trigger.open .arrow { transform:rotate(90deg); }
+.param-hint-body {
+    display:none;margin-top:6px;font-size:10.5px;color:var(--text-dim);
+    background:var(--bg);border-left:2px solid var(--border);
+    padding:8px 12px;border-radius:0 4px 4px 0;line-height:1.7;
+}
+.param-hint-body.open { display:block; }
+.hint-rule { display:flex;align-items:flex-start;gap:6px;margin-top:4px;font-size:10px; }
+.hint-rule.pass { color:var(--green); }
+.hint-rule.fail { color:var(--red); }
+.hint-rule.info { color:var(--text-dim); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="fade-in">
-    <div class="page-header">
-        <div class="page-tag">Model Training</div>
-        <h1 class="page-title">Configure & Train</h1>
-        <p class="page-subtitle">Set up the environment, workload, and DQN hyperparameters, then pick your compute device and start training.</p>
-    </div>
+<div class="page-header">
+    <div class="tag">MODEL TRAINING</div>
+    <h1>Configure &amp; Train</h1>
+    <p>Set up the environment and DQN hyperparameters, then train the agent.</p>
+</div>
 
-    <!-- ══════════════ CONFIG SECTION ══════════════ -->
-    <div id="config-section">
-        <div id="config-form-wrapper">
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
+<!-- Config section -->
+<div id="config-section">
+    <div class="grid-2" style="margin-bottom:1.5rem;">
 
-                <!-- Cloud Infrastructure -->
-                <div class="card">
-                    <div class="card-label">Cloud Infrastructure</div>
-                    <div class="form-group">
-                        <label class="form-label">Initial Servers</label>
-                        <input class="form-input" type="number" id="f_SERVER_COUNT" value="{{ config.SERVER_COUNT }}" min="1" max="50">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_SERVER_COUNT">Number of active servers at the start of each episode. The agent can scale up/down from this baseline when autoscaling is enabled.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Min Servers (autoscale)</label>
-                        <input class="form-input" type="number" id="f_MIN_SERVER_COUNT" value="{{ config.MIN_SERVER_COUNT }}" min="1">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_MIN_SERVER_COUNT">Floor on the number of servers during autoscaling. The agent cannot scale below this to ensure minimum service capacity.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Max Servers (autoscale)</label>
-                        <input class="form-input" type="number" id="f_MAX_SERVER_COUNT" value="{{ config.MAX_SERVER_COUNT }}" min="1">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_MAX_SERVER_COUNT">Ceiling on the number of servers. Limits infrastructure cost. Action space is (max_servers + 2) when autoscaling is on.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Autoscaling</label>
-                        <div class="form-toggle">
-                            <label class="toggle">
-                                <input type="checkbox" id="f_AUTOSCALING" {{ 'checked' if config.AUTOSCALING else '' }}>
-                                <span class="toggle-slider"></span>
-                            </label>
-                            <span style="font-size:12px;color:var(--text-dim);" id="autoscale-label">{{ 'Enabled' if config.AUTOSCALING else 'Disabled' }}</span>
-                        </div>
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_AUTOSCALING">When enabled, the agent has two extra actions: scale-up and scale-down. Disabled = fixed fleet, agent routes only.</div></div>
-                    </div>
+        <!-- Environment Parameters -->
+        <div class="card">
+            <div class="card-label">Environment</div>
+
+            <div class="param-group" id="pg_SERVER_COUNT">
+                <div class="param-label">Server Count <span class="param-validation-icon">✓</span></div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_SERVER_COUNT" value="{{ config.SERVER_COUNT }}" min="2" max="50">
+                    <span class="param-validation-icon">●</span>
                 </div>
-
-                <!-- Workload & Server -->
-                <div class="card">
-                    <div class="card-label">Workload & Server Parameters</div>
-                    <div class="form-group">
-                        <label class="form-label">Avg Incoming Requests (λ)</label>
-                        <input class="form-input" type="number" id="f_AVG_INCOMING_REQUESTS" value="{{ config.AVG_INCOMING_REQUESTS }}" min="1">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_AVG_INCOMING_REQUESTS">Mean of the Poisson distribution for new requests per time step. Higher = heavier traffic load.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Avg Request Workload (CPU units)</label>
-                        <input class="form-input" type="number" id="f_AVG_REQUEST_WORKLOAD" value="{{ config.AVG_REQUEST_WORKLOAD }}" min="1">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_AVG_REQUEST_WORKLOAD">Average CPU cost added to a server's queue per request.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Workload Variance</label>
-                        <input class="form-input" type="number" id="f_REQUEST_WORKLOAD_VARIANCE" value="{{ config.REQUEST_WORKLOAD_VARIANCE }}" min="0">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_REQUEST_WORKLOAD_VARIANCE">±range around the average workload. Higher variance = more bursty, unpredictable loads.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Max CPU Capacity / Server</label>
-                        <input class="form-input" type="number" id="f_MAX_SERVER_UTILIZATION" value="{{ config.MAX_SERVER_UTILIZATION }}" min="1">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_MAX_SERVER_UTILIZATION">Maximum CPU units a server can hold before it is considered at 100% utilization.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Processing Power / Server / Step</label>
-                        <input class="form-input" type="number" id="f_PROCESSING_POWER" value="{{ config.PROCESSING_POWER }}" min="1">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_PROCESSING_POWER">CPU units drained from each server's queue per time step.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Max Queue Length</label>
-                        <input class="form-input" type="number" id="f_MAX_QUEUE_LENGTH" value="{{ config.MAX_QUEUE_LENGTH }}" min="1">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_MAX_QUEUE_LENGTH">Hard cap on each server's queue. Prevents unbounded state growth.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">SLA Violation Threshold (latency)</label>
-                        <input class="form-input" type="number" id="f_SLA_VIOLATION_LATENCY" value="{{ config.SLA_VIOLATION_LATENCY }}" min="1">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_SLA_VIOLATION_LATENCY">If avg queue length exceeds this in a step, an SLA violation is triggered (−5 reward penalty).</div></div>
-                    </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
                 </div>
-
-                <!-- Training & DQN -->
-                <div class="card">
-                    <div class="card-label">Training Settings & DQN Hyperparameters</div>
-                    <div class="form-group">
-                        <label class="form-label">Training Episodes</label>
-                        <input class="form-input" type="number" id="f_TRAIN_EPISODE_COUNT" value="{{ config.TRAIN_EPISODE_COUNT }}" min="1">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_TRAIN_EPISODE_COUNT">Total episodes to train. 200–500 is typical.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Steps per Episode</label>
-                        <input class="form-input" type="number" id="f_EPISODE_LENGTH" value="{{ config.EPISODE_LENGTH }}" min="10">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_EPISODE_LENGTH">Max timesteps per episode before environment resets.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Discount Factor (γ)</label>
-                        <input class="form-input" type="number" id="f_GAMMA" value="{{ config.GAMMA }}" min="0" max="1" step="0.01">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_GAMMA">How much the agent values future vs immediate rewards. 0.99 = long-sighted.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Learning Rate</label>
-                        <input class="form-input" type="number" id="f_LEARNING_RATE" value="{{ config.LEARNING_RATE }}" min="0.00001" max="1" step="0.00001">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_LEARNING_RATE">Adam optimizer step size. 0.0005 is a solid default.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Batch Size</label>
-                        <input class="form-input" type="number" id="f_BATCH_SIZE" value="{{ config.BATCH_SIZE }}" min="8">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_BATCH_SIZE">Transitions sampled per training step. Keep ≤128 on CPU; 256–512 on GPU.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Replay Buffer Size</label>
-                        <input class="form-input" type="number" id="f_REPLAY_BUFFER_SIZE" value="{{ config.REPLAY_BUFFER_SIZE }}" min="100">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_REPLAY_BUFFER_SIZE">Max past transitions in memory. Larger = more sample diversity.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Epsilon Start / Min</label>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                            <input class="form-input" type="number" id="f_EPSILON_START" value="{{ config.EPSILON_START }}" min="0" max="1" step="0.01" placeholder="Start">
-                            <input class="form-input" type="number" id="f_EPSILON_MIN"   value="{{ config.EPSILON_MIN }}"   min="0" max="1" step="0.01" placeholder="Min">
-                        </div>
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_EPSILON">ε-greedy exploration rate decays from Start → Min over training.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Hidden Layer Dim</label>
-                        <input class="form-input" type="number" id="f_HIDDEN_DIM" value="{{ config.HIDDEN_DIM }}" min="16">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_HIDDEN_DIM">Width of the two hidden layers. Keep ≤128 on CPU; 256+ on GPU.</div></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Target Network Update (steps)</label>
-                        <input class="form-input" type="number" id="f_TARGET_UPDATE_STEPS" value="{{ config.TARGET_UPDATE_STEPS }}" min="10">
-                        <div class="collapsible"><span class="collapsible-trigger">▶ What is this?</span>
-                        <div class="collapsible-content" id="hint_TARGET_UPDATE_STEPS">Every N steps the target network is hard-copied from the policy network.</div></div>
-                    </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Number of servers in the fleet. Each gets a unique random processing speed.<br>
+                    <b>Effect on action space:</b> Action space = N×(N+1)/2 server pairs. N=10 → 55 actions.<br>
+                    <div id="rule_SERVER_COUNT"></div>
+                    <div class="hint-rule info">▸ Range: 2 – 50. Recommended: 5–15 for fast training.</div>
                 </div>
             </div>
 
-            <!-- Device Selector -->
-            <div class="card" style="margin-bottom:1.5rem;">
-                <div class="card-label" style="display:flex;align-items:center;gap:10px;">
-                    Compute Device
-                    <span id="device-scan-label" style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">scanning…</span>
+            <div class="param-group" id="pg_AVG_INCOMING_REQUESTS">
+                <div class="param-label">Avg Requests / Step (λ)</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_AVG_INCOMING_REQUESTS" value="{{ config.AVG_INCOMING_REQUESTS }}" min="1">
+                    <span class="param-validation-icon">●</span>
                 </div>
-                <div id="device-options" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;">
-                    <div style="height:64px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);animation:shimmer 1.5s infinite;"></div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
                 </div>
-                <div class="collapsible" style="margin-top:12px;"><span class="collapsible-trigger">▶ What is this?</span>
-                <div class="collapsible-content">Selects the PyTorch compute device. GPU (CUDA/MPS) is 5–20× faster. When on GPU, raise Batch Size to 256–512 and Hidden Dim to 256+.</div></div>
+                <div class="param-hint-body">
+                    <b>What:</b> Poisson arrival rate λ. Each step, Poisson(λ) requests arrive.<br>
+                    <b>Total CPU demand per step</b> = λ × avg_workload.<br>
+                    <div id="rule_AVG_INCOMING_REQUESTS"></div>
+                    <div class="hint-rule info">▸ Range: 1+. For full load: set λ so arrival ≈ fleet throughput.</div>
+                </div>
             </div>
 
-            <!-- Parameter Health Panel -->
-            <div class="card" id="health-panel" style="margin-bottom:1.5rem;">
-                <div class="card-label">Parameter Health Check
-                    <span style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">
-                        — updates live as you change values
-                    </span>
+            <div class="param-group" id="pg_AVG_REQUEST_WORKLOAD">
+                <div class="param-label">Avg Request Workload</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_AVG_REQUEST_WORKLOAD" value="{{ config.AVG_REQUEST_WORKLOAD }}" min="1">
+                    <span class="param-validation-icon">●</span>
                 </div>
-                <div id="health-rows" style="display:flex;flex-direction:column;gap:8px;"></div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Average CPU units each request requires.<br>
+                    <b>Rule:</b> Workload must be ≥ variance (variance cannot exceed workload).<br>
+                    <div id="rule_AVG_REQUEST_WORKLOAD"></div>
+                    <div class="hint-rule info">▸ Range: 1+. Recommended: 5–20.</div>
+                </div>
             </div>
 
-            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-                <button class="btn btn-primary" type="button" id="train-btn" onclick="startTraining()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    Start Training
-                </button>
-                <a class="btn btn-secondary" href="/">← Back</a>
+            <div class="param-group" id="pg_REQUEST_WORKLOAD_VARIANCE">
+                <div class="param-label">Workload Variance (±)</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_REQUEST_WORKLOAD_VARIANCE" value="{{ config.REQUEST_WORKLOAD_VARIANCE }}" min="0">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Workload is drawn from Uniform(avg−var, avg+var).<br>
+                    <b>Rule:</b> Must be ≤ avg_workload (otherwise negative workloads possible).<br>
+                    <div id="rule_REQUEST_WORKLOAD_VARIANCE"></div>
+                    <div class="hint-rule info">▸ Range: 0 – avg_workload. 0 = deterministic workload.</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_PROCESSING_POWER">
+                <div class="param-label">Avg Processing Power</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_PROCESSING_POWER" value="{{ config.PROCESSING_POWER }}" min="1">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Mean CPU units processed per server per step. Each server gets a unique speed drawn from Uniform(avg×0.3, avg×1.7) — this heterogeneity is why DQN outperforms classical algorithms.<br>
+                    <b>Fleet throughput:</b> N × avg_power CPU/step on average.<br>
+                    <div id="rule_PROCESSING_POWER"></div>
+                    <div class="hint-rule info">▸ Range: 1+. Recommended: set so N×power ≥ λ×workload.</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_MAX_QUEUE_LENGTH">
+                <div class="param-label">Max Queue Length</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_MAX_QUEUE_LENGTH" value="{{ config.MAX_QUEUE_LENGTH }}" min="10">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Hard cap on each server's queue depth. Requests above this are dropped (clipped).<br>
+                    <b>Rule:</b> Should be at least 2× SLA threshold — otherwise SLA fires immediately when any server gets loaded.<br>
+                    <div id="rule_MAX_QUEUE_LENGTH"></div>
+                    <div class="hint-rule info">▸ Range: 10+. Recommended: 100–500.</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_SLA_VIOLATION_LATENCY">
+                <div class="param-label">SLA Latency Threshold</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_SLA_VIOLATION_LATENCY" value="{{ config.SLA_VIOLATION_LATENCY }}" min="1">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> If avg fleet queue depth exceeds this, an SLA violation penalty (−20) is applied that episode step.<br>
+                    <b>Rule:</b> Must be &lt; max_queue_length (otherwise SLA can never trigger).<br>
+                    <div id="rule_SLA_VIOLATION_LATENCY"></div>
+                    <div class="hint-rule info">▸ Range: 1 – max_queue. Recommended: 40–100.</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_EPISODE_LENGTH">
+                <div class="param-label">Episode Length (steps)</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_EPISODE_LENGTH" value="{{ config.EPISODE_LENGTH }}" min="10">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Number of timesteps per episode before environment resets and server speeds are re-randomised.<br>
+                    <b>Rule:</b> Longer episodes give the agent more time to learn within an environment instance but slow each training cycle.<br>
+                    <div id="rule_EPISODE_LENGTH"></div>
+                    <div class="hint-rule info">▸ Range: 10+. Recommended: 200–1000.</div>
+                </div>
+            </div>
+
+            <!-- Throughput health banner -->
+            <div id="throughput-hint" style="margin-top:4px;padding:10px 12px;border-radius:6px;background:var(--surface);border:1px solid var(--border);font-size:11px;line-height:1.7;"></div>
+        </div>
+
+        <!-- DQN Hyperparameters -->
+        <div class="card">
+            <div class="card-label">DQN Hyperparameters</div>
+
+            <div class="param-group" id="pg_TRAIN_EPISODE_COUNT">
+                <div class="param-label">Training Episodes</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_TRAIN_EPISODE_COUNT" value="{{ config.TRAIN_EPISODE_COUNT }}" min="1">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Total episodes to train. Each episode resets the env with fresh server speeds.<br>
+                    <b>Rule:</b> More episodes = better convergence. Stop early if rolling avg reward plateaus for 50+ episodes.<br>
+                    <div id="rule_TRAIN_EPISODE_COUNT"></div>
+                    <div class="hint-rule info">▸ Recommended: 500–1000. Minimum: 200.</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_GAMMA">
+                <div class="param-label">Discount Factor (γ)</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_GAMMA" value="{{ config.GAMMA }}" min="0" max="1" step="0.01">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> How much the agent values future rewards vs immediate reward. γ=0.99 means reward 100 steps away is worth 0.99^100 ≈ 0.37 of today's reward.<br>
+                    <b>Rule:</b> Must be in [0, 1). Values ≥ 1 cause Q-values to diverge.<br>
+                    <div id="rule_GAMMA"></div>
+                    <div class="hint-rule info">▸ Range: 0.9–0.999. Standard: 0.99.</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_LEARNING_RATE">
+                <div class="param-label">Learning Rate</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_LEARNING_RATE" value="{{ config.LEARNING_RATE }}" min="0.000001" max="0.1" step="0.00001">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Adam optimiser step size. Too high = Q-values oscillate/diverge. Too low = very slow convergence.<br>
+                    <b>Rule:</b> 0.00001 – 0.01. For CPU use 0.0005; for GPU you can try 0.001.<br>
+                    <div id="rule_LEARNING_RATE"></div>
+                    <div class="hint-rule info">▸ Standard: 0.0005 (CPU), 0.001 (GPU).</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_BATCH_SIZE">
+                <div class="param-label">Batch Size</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_BATCH_SIZE" value="{{ config.BATCH_SIZE }}" min="8">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Number of transitions sampled from replay buffer per gradient step.<br>
+                    <b>Rule:</b> Must be strictly less than Replay Buffer Size. Larger batches = more stable gradients but slower per-step.<br>
+                    <div id="rule_BATCH_SIZE"></div>
+                    <div class="hint-rule info">▸ Range: 32–512. CPU: 64–128. GPU: 256–512.</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_REPLAY_BUFFER_SIZE">
+                <div class="param-label">Replay Buffer Size</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_REPLAY_BUFFER_SIZE" value="{{ config.REPLAY_BUFFER_SIZE }}" min="100">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Capacity of the experience replay memory. Older transitions are discarded when full.<br>
+                    <b>Rule:</b> Must be > batch_size. Recommended to be at least 10× batch_size × episode_length / num_servers.<br>
+                    <div id="rule_REPLAY_BUFFER_SIZE"></div>
+                    <div class="hint-rule info">▸ Range: 5000–100000. Standard: 10000–25000.</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_EPSILON">
+                <div class="param-label">Epsilon Start / Min</div>
+                <div class="param-input-row">
+                    <div style="display:flex;gap:8px;">
+                        <input class="form-input" type="number" id="f_EPSILON_START" value="{{ config.EPSILON_START }}" min="0" max="1" step="0.01" placeholder="Start">
+                        <input class="form-input" type="number" id="f_EPSILON_MIN"   value="{{ config.EPSILON_MIN }}"   min="0" max="1" step="0.01" placeholder="Min">
+                    </div>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> ε-greedy exploration rate. Agent takes random action with probability ε, greedy action with 1−ε.<br>
+                    Decays multiplicatively each episode: ε<sub>t+1</sub> = ε<sub>t</sub> × (ε_min/ε_start)^(1/episodes).<br>
+                    <b>Rules:</b> Start must be &gt; Min. Both must be in [0, 1]. Min should not be 0 (agent needs some exploration).<br>
+                    <div id="rule_EPSILON"></div>
+                    <div class="hint-rule info">▸ Standard: Start=1.0, Min=0.05.</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_TARGET_UPDATE_STEPS">
+                <div class="param-label">Target Network Update (steps)</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_TARGET_UPDATE_STEPS" value="{{ config.TARGET_UPDATE_STEPS }}" min="1">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Copy policy network weights → target network every N gradient steps. Target network provides stable Q-value targets.<br>
+                    <b>Rule:</b> Too small = unstable (target moves too fast). Too large = slow learning. Roughly 1–5× episode_length.<br>
+                    <div id="rule_TARGET_UPDATE_STEPS"></div>
+                    <div class="hint-rule info">▸ Range: 100–2000. Standard: 500.</div>
+                </div>
+            </div>
+
+            <div class="param-group" id="pg_HIDDEN_DIM">
+                <div class="param-label">Hidden Layer Dim</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_HIDDEN_DIM" value="{{ config.HIDDEN_DIM }}" min="16">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Width of the two hidden layers in the DQN network. More neurons = more representational capacity.<br>
+                    <b>Rule:</b> Should be at least 2× state_size (= N×3+2). For N=10, state=32, so 64+ is minimum. 128 is standard.<br>
+                    <div id="rule_HIDDEN_DIM"></div>
+                    <div class="hint-rule info">▸ CPU: 64–128. GPU: 128–512.</div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- ══════════════ PROGRESS SECTION ══════════════ -->
-    <div id="progress-section" style="display:none;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:12px;">
-            <div>
-                <h2 style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.3rem;">Training Progress</h2>
-                <div id="status-badge" class="badge badge-running" style="margin-top:6px;">
-                    <span class="pulse"></span> <span id="status-text">Initializing…</span>
-                </div>
-            </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                <button class="btn btn-danger"    id="stop-btn"  onclick="stopTraining()">Stop Training</button>
-                <button class="btn btn-secondary" id="reset-btn" onclick="resetToConfig()" style="display:none;">← Configure Again</button>
-            </div>
+    <!-- Device Selector -->
+    <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-label" style="display:flex;align-items:center;gap:10px;">
+            Compute Device
+            <span id="device-scan-label" style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">scanning…</span>
         </div>
+        <div id="device-options" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;">
+            <div style="height:64px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);animation:shimmer 1.5s infinite;"></div>
+        </div>
+    </div>
 
-        <!-- 5-stat row -->
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1rem;margin-bottom:1.5rem;">
-            <div class="stat-block">
-                <div class="stat-label">Episode</div>
-                <div class="stat-value accent" id="stat-episode">0</div>
-                <div class="stat-sub" id="stat-episode-total">of 0</div>
-            </div>
-            <div class="stat-block">
-                <div class="stat-label">Last Reward</div>
-                <div class="stat-value" id="stat-reward" style="color:var(--text);">—</div>
-                <div class="stat-sub">cumulative</div>
-            </div>
-            <div class="stat-block">
-                <div class="stat-label">Avg Reward (last 20)</div>
-                <div class="stat-value" id="stat-avg-reward" style="color:var(--text);">—</div>
-                <div class="stat-sub">rolling mean</div>
-            </div>
-            <div class="stat-block">
-                <div class="stat-label">Epsilon (ε)</div>
-                <div class="stat-value yellow" id="stat-epsilon">1.000</div>
-                <div class="stat-sub">exploration rate</div>
-            </div>
-            <div class="stat-block">
-                <div class="stat-label">Compute Device</div>
-                <div class="stat-value" id="stat-device" style="font-size:1rem;color:var(--accent);">—</div>
-                <div class="stat-sub" id="stat-device-sub">—</div>
-            </div>
-        </div>
+    <!-- Validation summary + Start button -->
+    <div id="validation-summary" style="display:none;margin-bottom:1rem;padding:10px 14px;border-radius:6px;background:rgba(255,59,92,.06);border:1px solid rgba(255,59,92,.3);font-size:11px;color:var(--red);"></div>
 
-        <!-- Progress bar -->
-        <div class="card" style="margin-bottom:1.5rem;">
-            <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:11px;color:var(--text-dim);">
-                <span>Training progress</span><span id="progress-pct">0%</span>
-            </div>
-            <div class="progress-bar-wrapper">
-                <div class="progress-bar-fill" id="progress-bar" style="width:0%;"></div>
-            </div>
-        </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary" type="button" id="train-btn" onclick="startTraining()">Start Training</button>
+        <a class="btn btn-secondary" href="/">← Back</a>
+        <div id="status-text" style="font-size:12px;color:var(--text-dim);">Ready</div>
+    </div>
+</div>
 
-        <!-- Charts -->
-        <div class="grid-2" style="margin-bottom:1.5rem;">
-            <div class="chart-box">
-                <div class="chart-title">Reward per Episode</div>
-                <canvas id="reward-chart" height="180"></canvas>
-            </div>
-            <div class="chart-box">
-                <div class="chart-title">Rolling Average Reward (window = 20)</div>
-                <canvas id="avg-reward-chart" height="180"></canvas>
-            </div>
+<!-- Progress section -->
+<div id="progress-section" style="display:none;margin-top:2rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
+        <h2 style="font-size:1.4rem;font-weight:700;">Training Progress</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <span id="status-badge-prog" class="badge badge-running">running</span>
+            <button class="btn btn-danger" id="stop-btn" onclick="stopTraining()">Stop Training</button>
+            <button class="btn btn-secondary" id="reset-btn" onclick="resetToConfig()" style="display:none;">← Configure Again</button>
         </div>
-        <div class="chart-box" style="margin-bottom:1.5rem;">
-            <div class="chart-title">Sample Q-values (latest state · updated every 5 episodes)</div>
-            <canvas id="qval-chart" height="100"></canvas>
+    </div>
+    <div style="margin-bottom:1rem;">
+        <span class="badge badge-running" id="ep-badge">EPISODE 0 / 0</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem;">
+        <div class="stat-block"><div class="stat-label">Episode</div><div class="stat-value" id="stat-episode">0</div><div class="stat-sub" id="stat-ep-of">of 0</div></div>
+        <div class="stat-block"><div class="stat-label">Last Reward</div><div class="stat-value" id="stat-reward" style="color:var(--accent2);">—</div><div class="stat-sub">cumulative</div></div>
+        <div class="stat-block"><div class="stat-label">Avg Reward (20)</div><div class="stat-value" id="stat-avg-reward" style="color:var(--accent);">—</div><div class="stat-sub">rolling mean</div></div>
+        <div class="stat-block"><div class="stat-label">Epsilon (ε)</div><div class="stat-value" id="stat-epsilon" style="color:var(--yellow);">—</div><div class="stat-sub">exploration rate</div></div>
+        <div class="stat-block"><div class="stat-label">Device</div><div class="stat-value" id="stat-device" style="font-size:1rem;color:var(--accent);">—</div><div class="stat-sub" id="stat-device-sub">—</div></div>
+    </div>
+    <div class="card" style="margin-bottom:1.5rem;">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:6px;">
+            <span>Training progress</span><span id="progress-pct">0%</span>
         </div>
+        <div style="height:6px;background:var(--border);border-radius:3px;">
+            <div id="progress-bar" style="height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .5s;width:0%;"></div>
+        </div>
+    </div>
+    <div class="grid-2" style="margin-bottom:1.5rem;">
+        <div class="chart-box"><div class="chart-title">Reward per Episode</div><canvas id="reward-chart" height="180"></canvas></div>
+        <div class="chart-box"><div class="chart-title">Rolling Average Reward (window = 20)</div><canvas id="avg-reward-chart" height="180"></canvas></div>
+    </div>
 
-        <!-- Error -->
-        <div id="error-box" style="display:none;" class="alert alert-error">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <pre id="error-text" style="font-size:11px;white-space:pre-wrap;overflow:auto;max-height:300px;"></pre>
+    <!-- Q-value diagnostics -->
+    <div style="margin-bottom:1.5rem;">
+        <div class="card-label" style="margin-bottom:0.8rem;">
+            Q-Value Diagnostics
+            <span style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">— updated every episode</span>
         </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.8rem;margin-bottom:1rem;">
+            <div class="stat-block"><div class="stat-label">Best Action</div><div class="stat-value" id="qv-best-action" style="font-size:0.85rem;color:var(--accent);">—</div><div class="stat-sub" id="qv-best-type">—</div></div>
+            <div class="stat-block"><div class="stat-label">Max Q</div><div class="stat-value" id="qv-max" style="font-size:1rem;color:var(--green);">—</div><div class="stat-sub">highest Q</div></div>
+            <div class="stat-block"><div class="stat-label">Min Q</div><div class="stat-value" id="qv-min" style="font-size:1rem;color:var(--red);">—</div><div class="stat-sub">lowest Q</div></div>
+            <div class="stat-block"><div class="stat-label">Q Spread</div><div class="stat-value" id="qv-spread" style="font-size:1rem;color:var(--yellow);">—</div><div class="stat-sub">max − min</div></div>
+            <div class="stat-block"><div class="stat-label">Health</div><div id="qv-health-badge" class="badge badge-idle" style="margin-top:4px;font-size:10px;">waiting</div><div class="stat-sub" id="qv-health-hint">—</div></div>
+        </div>
+        <div class="grid-2" style="gap:1rem;">
+            <div class="chart-box"><div class="chart-title">Q-values per action pair (latest state)</div><canvas id="qval-chart" height="140"></canvas></div>
+            <div class="chart-box"><div class="chart-title">Q Spread over training (convergence signal)</div><canvas id="qspread-chart" height="140"></canvas></div>
+        </div>
+    </div>
 
-        <!-- Post-training -->
-        <div id="post-training" style="display:none;">
-            <div class="alert alert-info" style="margin-bottom:1rem;">
-                ✓ Training complete! Model saved to <code>artifacts/dqn_trained_model.pth</code>
-            </div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                <a class="btn btn-success" href="/evaluate">Evaluate This Model →</a>
-                <a class="btn btn-secondary" href="/">← Home</a>
-                <button class="btn btn-secondary" onclick="resetToConfig()">Train Again</button>
-            </div>
+    <div id="error-box" style="display:none;" class="alert alert-error">
+        <pre id="error-text" style="font-size:11px;white-space:pre-wrap;overflow:auto;max-height:300px;"></pre>
+    </div>
+
+    <div id="post-training" style="display:none;">
+        <div class="alert alert-info" style="margin-bottom:1rem;">
+            ✓ Training complete! Model saved to <code>artifacts/dqn_trained_model.pth</code>
+        </div>
+        <div id="post-training-advice" style="margin-bottom:1rem;padding:12px 16px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:11px;line-height:1.8;"></div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <a class="btn btn-success" href="/evaluate">Evaluate This Model →</a>
+            <a class="btn btn-secondary" href="/">← Home</a>
+            <button class="btn btn-secondary" onclick="resetToConfig()">Train Again</button>
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script>
-let rewardChart, avgRewardChart, qvalChart;
-let pollInterval = null;
 let selectedDevice = 'cpu';
+let pollInterval   = null;
 let chartsInitialized = false;
+let rewardChart, avgRewardChart, qvalChart, qspreadChart;
+let currentActionMap = [];  // populated from API
 
-// On page load: resume polling if training already running (handles page refresh)
-window.addEventListener('DOMContentLoaded', async () => {
-    loadDevices();
-    attachParamListeners();
-    computeGuidance();
-    document.getElementById('f_AUTOSCALING').addEventListener('change', function() {
-        document.getElementById('autoscale-label').textContent = this.checked ? 'Enabled' : 'Disabled';
-    });
-    try {
-        const resp = await fetch('/api/training_status');
-        const data = await resp.json();
-        if (data.running || (data.episode > 0 && !data.done)) {
-            console.log('Active training detected, resuming at episode', data.episode);
-            startPolling();
-            showProgressSection(data.total_episodes, data.device || 'cpu');
-            updateUI(data);
-        }
-    } catch(e) { console.warn('Status check on load failed:', e); }
-});
-
-
-// ── Parametric guidance engine ─────────────────────────────────────────────
-// Reads current input values, computes derived ranges, updates hint divs + health panel
-
-function iv(id) { var el = document.getElementById('f_' + id); return el ? (parseFloat(el.value) || 0) : 0; }
-function bv(id) { var el = document.getElementById('f_' + id); return el ? el.checked : false; }
-
-function setHint(id, html) {
-    var el = document.getElementById('hint_' + id);
-    if (el) el.innerHTML = html;
+// ── Collapsible hint toggle ──────────────────────────────────────────────────
+function toggleHint(trigger) {
+    trigger.classList.toggle('open');
+    var body = trigger.nextElementSibling;
+    if (body) body.classList.toggle('open');
+    runAllValidations();
 }
 
-function statusChip(ok, text) {
-    var color = ok ? 'var(--green)' : 'var(--red)';
-    var bg    = ok ? 'rgba(0,255,136,0.08)' : 'rgba(255,59,92,0.08)';
-    var border= ok ? 'rgba(0,255,136,0.25)' : 'rgba(255,59,92,0.25)';
-    var icon  = ok ? '✓' : '✗';
-    return '<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:'+bg+';color:'+color+';border:1px solid '+border+';font-weight:600;">'+icon+' '+text+'</span>';
+// ── Parameter validation rules ───────────────────────────────────────────────
+function iv(id) { var e = document.getElementById(id); return e ? parseFloat(e.value) || 0 : 0; }
+
+function setValid(groupId, valid, msg) {
+    var g = document.getElementById(groupId);
+    if (!g) return;
+    g.classList.toggle('valid',   valid === true);
+    g.classList.toggle('invalid', valid === false);
+    var icon = g.querySelector('.param-validation-icon');
+    if (icon) icon.textContent = valid === true ? '✓' : valid === false ? '✗' : '●';
 }
 
-function computeGuidance() {
-    var servers     = iv('SERVER_COUNT');
-    var minServers  = iv('MIN_SERVER_COUNT');
-    var maxServers  = iv('MAX_SERVER_COUNT');
-    var autoscale   = bv('AUTOSCALING');
-    var lambda      = iv('AVG_INCOMING_REQUESTS');
-    var workload    = iv('AVG_REQUEST_WORKLOAD');
-    var variance    = iv('REQUEST_WORKLOAD_VARIANCE');
-    var maxUtil     = iv('MAX_SERVER_UTILIZATION');
-    var procPower   = iv('PROCESSING_POWER');
-    var maxQueue    = iv('MAX_QUEUE_LENGTH');
-    var slaThresh   = iv('SLA_VIOLATION_LATENCY');
-    var episodes    = iv('TRAIN_EPISODE_COUNT');
-    var epLen       = iv('EPISODE_LENGTH');
-    var batchSize   = iv('BATCH_SIZE');
-    var bufferSize  = iv('REPLAY_BUFFER_SIZE');
-    var hiddenDim   = iv('HIDDEN_DIM');
-    var targetUpd   = iv('TARGET_UPDATE_STEPS');
-    var epsStart    = iv('EPSILON_START');
-    var epsMin      = iv('EPSILON_MIN');
-
-    // Key derived quantities
-    var effectiveServers  = autoscale ? maxServers : servers;
-    var totalThroughput   = effectiveServers * procPower;           // CPU units processed per step
-    var avgArrival        = lambda * workload;                      // avg CPU units arriving per step
-    var peakArrival       = lambda * (workload + variance);         // worst-case burst per step
-    var utilizationPct    = totalThroughput > 0 ? (avgArrival / totalThroughput * 100) : 999;
-    var stepsToFillQueue  = procPower > 0 ? Math.round(maxQueue / Math.max(1, avgArrival / servers - procPower)) : Infinity;
-    var slaRatio          = maxQueue > 0 ? (slaThresh / maxQueue * 100) : 0;
-    var bufferInEpisodes  = (epLen > 0 && lambda > 0) ? (bufferSize / (epLen * lambda)).toFixed(1) : '?';
-    var totalSteps        = episodes * epLen;
-    var targetUpdPerEp    = epLen > 0 ? (epLen / targetUpd).toFixed(1) : '?';
-
-    // ── Per-parameter hints ──────────────────────────────────────────────────
-
-    setHint('SERVER_COUNT',
-        'Starting fleet size. ' +
-        (autoscale
-            ? 'With autoscaling on, the agent can grow this to <b>' + maxServers + '</b> or shrink to <b>' + minServers + '</b>.'
-            : 'Fixed fleet — autoscaling is off.') +
-        ' <br><b>Rule:</b> SERVER_COUNT should be between MIN (' + minServers + ') and MAX (' + maxServers + '). ' +
-        statusChip(servers >= minServers && servers <= maxServers, servers >= minServers && servers <= maxServers ? 'ok' : minServers+' ≤ value ≤ '+maxServers)
-    );
-
-    setHint('MIN_SERVER_COUNT',
-        'Minimum fleet size during autoscaling. ' +
-        '<br><b>Rule:</b> Must be ≥ 1 and ≤ SERVER_COUNT (' + servers + '). ' +
-        'Throughput at minimum = <b>' + (minServers * procPower) + ' CPU/step</b>. ' +
-        'Make sure avg arrival (' + avgArrival.toFixed(0) + ' CPU/step) does not exceed this or the queue will always grow at minimum scale. ' +
-        statusChip(minServers >= 1 && minServers <= servers, minServers >= 1 && minServers <= servers ? 'ok' : 'must be ≤ '+servers)
-    );
-
-    setHint('MAX_SERVER_COUNT',
-        'Maximum fleet size. Total throughput at max scale = <b>' + (maxServers * procPower) + ' CPU/step</b>. ' +
-        '<br><b>Rule:</b> Should comfortably exceed avg arrival rate. ' +
-        'Avg arrival = <b>' + avgArrival.toFixed(0) + ' CPU/step</b>. ' +
-        'Recommended max throughput ≥ 1.5× arrival = <b>' + (avgArrival * 1.5).toFixed(0) + ' CPU/step</b>, needing ≥ <b>' + Math.ceil(avgArrival * 1.5 / Math.max(1, procPower)) + ' servers</b>. ' +
-        statusChip(maxServers * procPower >= avgArrival * 1.2, maxServers * procPower >= avgArrival * 1.2 ? 'headroom ok' : 'increase max servers or reduce arrival')
-    );
-
-    setHint('AUTOSCALING',
-        'When enabled the action space grows by 2 (scale-up, scale-down). ' +
-        'The agent learns to trade server cost (−0.1 × num_servers per step) against queue buildup. ' +
-        '<br><b>Without autoscaling:</b> fixed at ' + servers + ' servers, throughput = <b>' + (servers * procPower) + ' CPU/step</b>. ' +
-        (autoscale ? '' : '&nbsp;' + statusChip(servers * procPower >= avgArrival, servers * procPower >= avgArrival ? 'throughput ok' : 'queues will grow — enable autoscaling or reduce arrival'))
-    );
-
-    setHint('AVG_INCOMING_REQUESTS',
-        'Each step, <b>Poisson(λ=' + lambda + ')</b> requests arrive. ' +
-        'Each carries ~' + workload + '±' + variance + ' CPU units → avg <b>' + avgArrival.toFixed(0) + ' CPU/step</b>, peak <b>' + peakArrival.toFixed(0) + ' CPU/step</b>. ' +
-        '<br><b>Balance rule:</b> λ × workload ≤ servers × processing_power for stable queues. ' +
-        'Current load factor = <b>' + utilizationPct.toFixed(0) + '%</b> of ' + (autoscale?'max-scale ':'') + 'throughput. ' +
-        statusChip(utilizationPct < 90, utilizationPct < 50 ? 'light load' : utilizationPct < 90 ? 'moderate load' : 'overloaded — reduce λ or increase processing_power') +
-        '<br><b>Recommended λ</b> for ~70% utilization: <b>' + Math.max(1, Math.floor(effectiveServers * procPower * 0.7 / Math.max(1, workload))) + '</b>'
-    );
-
-    setHint('AVG_REQUEST_WORKLOAD',
-        'CPU cost per request. Together with λ=' + lambda + ', avg arrival = <b>' + avgArrival.toFixed(0) + ' CPU/step</b>. ' +
-        '<br><b>Rule:</b> workload × λ ≤ servers × processing_power. ' +
-        'Max sustainable workload per request at current λ = <b>' + (effectiveServers * procPower / Math.max(1, lambda)).toFixed(1) + ' CPU</b>. ' +
-        statusChip(avgArrival <= totalThroughput, avgArrival <= totalThroughput ? 'ok' : 'reduce workload or λ') +
-        '<br><b>Tip:</b> keeping workload between 0.5× and 2× processing_power (' + (procPower*0.5).toFixed(0) + '–' + (procPower*2) + ') gives interesting but solvable dynamics.'
-    );
-
-    setHint('REQUEST_WORKLOAD_VARIANCE',
-        'Each request\'s workload is sampled from [' + Math.max(0,workload-variance) + ', ' + (workload+variance) + ']. ' +
-        '<br><b>Rule:</b> variance < workload (current: ' + variance + ' vs ' + workload + '). ' +
-        statusChip(variance < workload, variance < workload ? 'ok' : 'variance ≥ workload causes zero-cost requests') +
-        '<br>High variance makes the agent\'s job harder. For a first run, keep variance ≤ 50% of workload = <b>' + (workload*0.5).toFixed(0) + '</b>.'
-    );
-
-    setHint('MAX_SERVER_UTILIZATION',
-        'Normalisation constant. cpu_usage[i] = queue[i] / MAX_SERVER_UTILIZATION (used in state). ' +
-        '<br><b>Rule:</b> Should be ≥ PROCESSING_POWER (' + procPower + ') to avoid instant 100% utilization. ' +
-        'Recommended ≥ 5× processing_power = <b>' + procPower*5 + '</b>. ' +
-        statusChip(maxUtil >= procPower * 2, maxUtil >= procPower * 2 ? 'ok' : 'too low — increase to ≥ '+(procPower*5))
-    );
-
-    setHint('PROCESSING_POWER',
-        'Each server drains <b>' + procPower + ' CPU/step</b> from its queue. ' +
-        'Total fleet throughput = <b>' + (effectiveServers * procPower) + ' CPU/step</b>. ' +
-        '<br><b>Arrival vs throughput:</b> ' + avgArrival.toFixed(0) + ' arriving vs ' + (effectiveServers * procPower) + ' processed. ' +
-        statusChip(effectiveServers * procPower >= avgArrival, effectiveServers * procPower >= avgArrival ? 'throughput sufficient' : 'queues will grow indefinitely') +
-        '<br><b>Recommended range:</b> 0.5×–2× avg workload per request = <b>' + (workload*0.5).toFixed(0) + '–' + (workload*2) + ' CPU/step</b>.'
-    );
-
-    setHint('MAX_QUEUE_LENGTH',
-        'Hard cap per server queue. ' +
-        'At current net growth rate of <b>' + Math.max(0, (avgArrival/Math.max(1,servers) - procPower)).toFixed(1) + ' CPU/step</b>, queue fills in ~<b>' + (procPower > avgArrival/Math.max(1,servers) ? '∞ (drains)' : Math.round(maxQueue / Math.max(0.01, avgArrival/Math.max(1,servers) - procPower)) + ' steps') + '</b>. ' +
-        '<br><b>Rule:</b> MAX_QUEUE_LENGTH should be >> SLA_VIOLATION_LATENCY (' + slaThresh + '). ' +
-        'Current ratio = <b>' + slaRatio.toFixed(0) + '%</b> of queue cap — SLA should trigger well before queue fills. ' +
-        statusChip(slaThresh < maxQueue * 0.8, slaThresh < maxQueue * 0.8 ? 'good headroom' : 'SLA too close to cap — increase MAX_QUEUE_LENGTH') +
-        '<br><b>Recommended:</b> ≥ 3× SLA threshold = <b>' + (slaThresh * 3) + '</b>.'
-    );
-
-    setHint('SLA_VIOLATION_LATENCY',
-        'SLA is breached when avg queue > ' + slaThresh + '. This adds −5 to the reward. ' +
-        '<br><b>Rule:</b> Should be between processing_power (' + procPower + ') and max_queue (' + maxQueue + '). ' +
-        'Recommended: 20–60% of MAX_QUEUE_LENGTH = <b>' + (maxQueue*0.2).toFixed(0) + '–' + (maxQueue*0.6).toFixed(0) + '</b>. ' +
-        statusChip(slaThresh > procPower && slaThresh < maxQueue * 0.8, slaThresh > procPower && slaThresh < maxQueue * 0.8 ? 'ok' : 'adjust to '+(maxQueue*0.2).toFixed(0)+'–'+(maxQueue*0.6).toFixed(0))
-    );
-
-    setHint('TRAIN_EPISODE_COUNT',
-        '<b>' + episodes + ' episodes × ' + epLen + ' steps = ' + totalSteps.toLocaleString() + ' total training steps.</b> ' +
-        '<br>Replay buffer (' + bufferSize + ') covers ~' + bufferInEpisodes + ' episodes of experience. ' +
-        'Recommended ≥ 200 episodes for meaningful learning. ' +
-        statusChip(episodes >= 200, episodes >= 200 ? 'ok' : 'consider ≥ 200')
-    );
-
-    setHint('EPISODE_LENGTH',
-        'Each episode runs up to <b>' + epLen + ' steps</b>. ' +
-        'At λ=' + lambda + ', ~' + (lambda * epLen).toFixed(0) + ' total requests arrive per episode. ' +
-        '<br>Target network updates every ' + targetUpd + ' steps = <b>' + targetUpdPerEp + '× per episode</b>. ' +
-        'Recommended: long enough to see queue build-up and drain, typically 200–1000 steps.'
-    );
-
-    setHint('GAMMA',
-        'Discount factor. With γ=' + iv('GAMMA') + ' and episode length ' + epLen + ', ' +
-        'rewards ' + epLen + ' steps ahead are worth <b>' + (Math.pow(iv('GAMMA'), epLen) * 100).toFixed(1) + '%</b> of their face value. ' +
-        '<br><b>Recommended:</b> 0.95–0.99 for this environment. Lower = more reactive but short-sighted.'
-    );
-
-    setHint('LEARNING_RATE',
-        'Step size for Adam optimizer. Too high = unstable training. Too low = slow convergence. ' +
-        '<br><b>Recommended range:</b> 0.0001–0.001. For GPU with larger batches, lean towards 0.001. Current: <b>' + iv('LEARNING_RATE') + '</b>. ' +
-        statusChip(iv('LEARNING_RATE') >= 0.00005 && iv('LEARNING_RATE') <= 0.002, iv('LEARNING_RATE') >= 0.00005 && iv('LEARNING_RATE') <= 0.002 ? 'ok' : 'outside typical range')
-    );
-
-    setHint('BATCH_SIZE',
-        'Samples drawn per gradient step from the replay buffer. ' +
-        '<br><b>Rule:</b> BATCH_SIZE < REPLAY_BUFFER_SIZE (' + bufferSize + '). ' +
-        statusChip(batchSize < bufferSize, batchSize < bufferSize ? 'ok' : 'must be < buffer size') +
-        ' Also needs ' + batchSize + ' transitions before training starts. ' +
-        'At λ=' + lambda + ' req/step, buffer fills after ~<b>' + Math.ceil(batchSize / Math.max(1,lambda)) + ' steps</b>. ' +
-        '<br><b>Recommended:</b> 64–128 on CPU, 256–512 on GPU.'
-    );
-
-    setHint('REPLAY_BUFFER_SIZE',
-        'Stores the last <b>' + bufferSize + '</b> (state, action, reward, next_state) transitions. ' +
-        'At λ=' + lambda + ' req/step and ' + epLen + ' steps/episode = ~' + (lambda * epLen) + ' transitions/episode, buffer covers ~<b>' + bufferInEpisodes + ' episodes</b>. ' +
-        '<br><b>Rule:</b> REPLAY_BUFFER_SIZE >> BATCH_SIZE (' + batchSize + '). ' +
-        'Recommended ≥ 10× episode length × λ = <b>' + (10 * epLen * lambda).toLocaleString() + '</b>. ' +
-        statusChip(bufferSize >= batchSize * 10, bufferSize >= batchSize * 10 ? 'ok' : 'increase to ≥ '+(batchSize*10))
-    );
-
-    setHint('EPSILON',
-        'Exploration decays from ' + epsStart + ' → ' + epsMin + ' over ' + episodes + ' episodes. ' +
-        'Decay per episode = <b>' + (Math.pow(epsMin/Math.max(0.001,epsStart), 1/Math.max(1,episodes))).toFixed(4) + '</b>. ' +
-        'Agent is mostly greedy (ε < 0.1) after episode <b>' + Math.round(Math.log(0.1/Math.max(0.001,epsStart)) / Math.log(Math.pow(epsMin/Math.max(0.001,epsStart), 1/Math.max(1,episodes)))) + '</b>. ' +
-        '<br><b>Tip:</b> For 300 episodes, ε_min=0.05 with ε_start=1.0 gives a healthy exploration curve.'
-    );
-
-    setHint('HIDDEN_DIM',
-        'State size for this config = <b>' + (maxServers*2 + 3) + ' inputs</b> (cpu_usage×' + maxServers + ' + queues×' + maxServers + ' + avg_latency + num_servers + avg_cpu). ' +
-        'Action size = <b>' + (autoscale ? maxServers+2 : maxServers) + '</b>. ' +
-        '<br><b>Rule:</b> hidden_dim should be ≥ state_size. Recommended ≥ <b>' + (maxServers*2 + 3) + '</b>. ' +
-        statusChip(hiddenDim >= maxServers*2+3, hiddenDim >= maxServers*2+3 ? 'ok' : 'increase to ≥ '+(maxServers*2+3)) +
-        ' Keep ≤128 on CPU; 256+ fine on GPU.'
-    );
-
-    setHint('TARGET_UPDATE_STEPS',
-        'Target network syncs every <b>' + targetUpd + ' steps</b> = every <b>' + targetUpdPerEp + ' episodes</b> (at ' + epLen + ' steps/episode). ' +
-        '<br><b>Recommended:</b> 200–1000 steps (roughly every 0.5–2 episodes). Too frequent = unstable, too rare = slow to adapt. ' +
-        statusChip(targetUpd >= 100 && targetUpd <= epLen * 3, targetUpd >= 100 && targetUpd <= epLen * 3 ? 'ok' : 'recommended 200–'+(epLen*2))
-    );
-
-    // ── Health Panel ──────────────────────────────────────────────────────────
-    var checks = [
-        {
-            label: 'Throughput balance',
-            desc: 'λ × workload vs fleet throughput',
-            val: avgArrival.toFixed(0) + ' arriving / ' + totalThroughput + ' capacity ('+utilizationPct.toFixed(0)+'%)',
-            ok: utilizationPct < 90,
-            tip: utilizationPct < 90 ? null : 'Reduce AVG_INCOMING_REQUESTS or AVG_REQUEST_WORKLOAD, or increase PROCESSING_POWER / server count'
-        },
-        {
-            label: 'Peak burst headroom',
-            desc: 'Worst-case step (λ × (workload+variance))',
-            val: peakArrival.toFixed(0) + ' peak vs ' + totalThroughput + ' capacity',
-            ok: peakArrival <= totalThroughput * 1.2,
-            tip: peakArrival > totalThroughput * 1.2 ? 'Reduce REQUEST_WORKLOAD_VARIANCE or increase PROCESSING_POWER' : null
-        },
-        {
-            label: 'Server count ordering',
-            desc: 'MIN ≤ INITIAL ≤ MAX',
-            val: minServers + ' ≤ ' + servers + ' ≤ ' + maxServers,
-            ok: minServers <= servers && servers <= maxServers,
-            tip: !(minServers <= servers && servers <= maxServers) ? 'Fix: MIN_SERVER_COUNT ≤ SERVER_COUNT ≤ MAX_SERVER_COUNT' : null
-        },
-        {
-            label: 'SLA threshold placement',
-            desc: 'SLA should trigger before queue fills',
-            val: 'SLA at ' + slaThresh + ', queue cap at ' + maxQueue + ' (' + slaRatio.toFixed(0) + '%)',
-            ok: slaThresh < maxQueue * 0.8 && slaThresh > procPower,
-            tip: slaThresh >= maxQueue * 0.8 ? 'Increase MAX_QUEUE_LENGTH to ≥ ' + (slaThresh * 3) : (slaThresh <= procPower ? 'Increase SLA_VIOLATION_LATENCY above PROCESSING_POWER (' + procPower + ')' : null)
-        },
-        {
-            label: 'Replay buffer coverage',
-            desc: 'Buffer covers enough experience to learn from',
-            val: bufferSize + ' transitions ≈ ' + bufferInEpisodes + ' episodes',
-            ok: parseFloat(bufferInEpisodes) >= 5,
-            tip: parseFloat(bufferInEpisodes) < 5 ? 'Increase REPLAY_BUFFER_SIZE to ≥ ' + (10 * epLen * lambda).toLocaleString() : null
-        },
-        {
-            label: 'Batch vs buffer',
-            desc: 'Batch must be much smaller than buffer',
-            val: 'Batch ' + batchSize + ' / Buffer ' + bufferSize + ' (' + (batchSize/bufferSize*100).toFixed(1) + '%)',
-            ok: batchSize < bufferSize * 0.1,
-            tip: batchSize >= bufferSize * 0.1 ? 'Increase REPLAY_BUFFER_SIZE to ≥ ' + (batchSize * 20) : null
-        },
-        {
-            label: 'Hidden dim vs state size',
-            desc: 'Network should be wide enough for the state',
-            val: 'State: ' + (maxServers*2+3) + ' dims, Hidden: ' + hiddenDim,
-            ok: hiddenDim >= maxServers*2+3,
-            tip: hiddenDim < maxServers*2+3 ? 'Increase HIDDEN_DIM to ≥ ' + (maxServers*2+3) : null
-        },
-        {
-            label: 'Variance < Workload',
-            desc: 'Variance should not exceed workload (prevents zero-cost requests)',
-            val: 'Variance ' + variance + ' vs workload ' + workload,
-            ok: variance < workload,
-            tip: variance >= workload ? 'Reduce REQUEST_WORKLOAD_VARIANCE to < ' + workload : null
-        },
-    ];
-
-    var passCount = checks.filter(function(c){return c.ok;}).length;
-    var panel = document.getElementById('health-rows');
-    if (!panel) return;
-
-    var html = checks.map(function(c) {
-        var color  = c.ok ? 'var(--green)' : 'var(--red)';
-        var bgCol  = c.ok ? 'rgba(0,255,136,0.04)' : 'rgba(255,59,92,0.04)';
-        var border = c.ok ? 'rgba(0,255,136,0.15)' : 'rgba(255,59,92,0.2)';
-        var icon   = c.ok ? '✓' : '✗';
-        return '<div style="display:flex;align-items:flex-start;gap:12px;padding:8px 12px;border-radius:6px;background:'+bgCol+';border:1px solid '+border+';">' +
-            '<span style="font-size:12px;color:'+color+';flex-shrink:0;margin-top:1px;">'+icon+'</span>' +
-            '<div style="flex:1;min-width:0;">' +
-                '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">' +
-                    '<span style="font-size:11px;font-weight:500;color:var(--text);">'+c.label+'</span>' +
-                    '<span style="font-size:10px;color:var(--text-muted);">'+c.desc+'</span>' +
-                '</div>' +
-                '<div style="font-size:11px;color:'+color+';font-family:JetBrains Mono;margin-top:2px;">'+c.val+'</div>' +
-                (c.tip ? '<div style="font-size:10px;color:var(--yellow);margin-top:3px;">→ '+c.tip+'</div>' : '') +
-            '</div>' +
-        '</div>';
-    }).join('');
-
-    // Summary line
-    var summaryColor = passCount === checks.length ? 'var(--green)' : passCount >= checks.length * 0.75 ? 'var(--yellow)' : 'var(--red)';
-    var summaryText  = passCount === checks.length ? 'All checks pass — configuration looks healthy' :
-                       passCount >= checks.length * 0.75 ? 'Minor issues detected — training will work but may be suboptimal' :
-                       'Multiple issues detected — review red items before training';
-    html = '<div style="font-size:11px;padding:8px 12px;border-radius:6px;background:rgba(0,0,0,0.2);color:'+summaryColor+';font-weight:500;margin-bottom:6px;">'+
-        passCount+'/'+checks.length+' checks passed — '+summaryText+'</div>' + html;
-
-    panel.innerHTML = html;
+function ruleHtml(pass, text) {
+    return '<div class="hint-rule ' + (pass ? 'pass' : 'fail') + '">' + (pass ? '✓' : '✗') + ' ' + text + '</div>';
 }
 
-// Wire up: recompute on any input change
-function attachParamListeners() {
-    var ids = ['SERVER_COUNT','MIN_SERVER_COUNT','MAX_SERVER_COUNT','AUTOSCALING',
-               'AVG_INCOMING_REQUESTS','AVG_REQUEST_WORKLOAD','REQUEST_WORKLOAD_VARIANCE',
-               'MAX_SERVER_UTILIZATION','PROCESSING_POWER','MAX_QUEUE_LENGTH','SLA_VIOLATION_LATENCY',
-               'TRAIN_EPISODE_COUNT','EPISODE_LENGTH','GAMMA','LEARNING_RATE','BATCH_SIZE',
-               'REPLAY_BUFFER_SIZE','EPSILON_START','EPSILON_MIN','HIDDEN_DIM','TARGET_UPDATE_STEPS'];
-    ids.forEach(function(id) {
-        var el = document.getElementById('f_' + id);
-        if (el) el.addEventListener('input', computeGuidance);
-        if (el) el.addEventListener('change', computeGuidance);
-    });
-}
-// ── End parametric guidance engine ────────────────────────────────────────────
+function runAllValidations() {
+    var N    = iv('f_SERVER_COUNT');
+    var lam  = iv('f_AVG_INCOMING_REQUESTS');
+    var wl   = iv('f_AVG_REQUEST_WORKLOAD');
+    var wlv  = iv('f_REQUEST_WORKLOAD_VARIANCE');
+    var pp   = iv('f_PROCESSING_POWER');
+    var mq   = iv('f_MAX_QUEUE_LENGTH');
+    var sla  = iv('f_SLA_VIOLATION_LATENCY');
+    var ep   = iv('f_EPISODE_LENGTH');
+    var eps  = iv('f_TRAIN_EPISODE_COUNT');
+    var gam  = iv('f_GAMMA');
+    var lr   = iv('f_LEARNING_RATE');
+    var bs   = iv('f_BATCH_SIZE');
+    var buf  = iv('f_REPLAY_BUFFER_SIZE');
+    var es   = iv('f_EPSILON_START');
+    var em   = iv('f_EPSILON_MIN');
+    var tup  = iv('f_TARGET_UPDATE_STEPS');
+    var hd   = iv('f_HIDDEN_DIM');
 
-// Device selector
+    var stateSize = N * 3 + 2;
+    var actionSize = N * (N + 1) / 2;
+    var arrival = lam * wl;
+    var throughput = N * pp;
+    var ok_throughput = throughput >= arrival;
+
+    // SERVER_COUNT
+    var r = document.getElementById('rule_SERVER_COUNT');
+    if (r) r.innerHTML = ruleHtml(N >= 2 && N <= 50, 'Must be 2–50 (currently ' + N + ')');
+    setValid('pg_SERVER_COUNT', N >= 2 && N <= 50);
+
+    // AVG_INCOMING_REQUESTS
+    r = document.getElementById('rule_AVG_INCOMING_REQUESTS');
+    if (r) r.innerHTML =
+        ruleHtml(lam >= 1, 'Must be ≥ 1') +
+        ruleHtml(ok_throughput, 'Fleet throughput (' + throughput.toFixed(0) + ') ' + (ok_throughput ? '≥' : '< ') + ' arrival demand (' + arrival.toFixed(0) + ')');
+    setValid('pg_AVG_INCOMING_REQUESTS', lam >= 1 && ok_throughput ? true : lam >= 1 ? null : false);
+
+    // AVG_REQUEST_WORKLOAD
+    r = document.getElementById('rule_AVG_REQUEST_WORKLOAD');
+    if (r) r.innerHTML =
+        ruleHtml(wl >= 1, 'Must be ≥ 1') +
+        ruleHtml(wl >= wlv, 'Must be ≥ variance (' + wlv + ') — otherwise negative workloads possible');
+    setValid('pg_AVG_REQUEST_WORKLOAD', wl >= 1 && wl >= wlv);
+
+    // REQUEST_WORKLOAD_VARIANCE
+    r = document.getElementById('rule_REQUEST_WORKLOAD_VARIANCE');
+    if (r) r.innerHTML =
+        ruleHtml(wlv >= 0, 'Must be ≥ 0') +
+        ruleHtml(wlv <= wl, 'Must be ≤ avg_workload (' + wl + ')');
+    setValid('pg_REQUEST_WORKLOAD_VARIANCE', wlv >= 0 && wlv <= wl);
+
+    // PROCESSING_POWER
+    r = document.getElementById('rule_PROCESSING_POWER');
+    if (r) r.innerHTML =
+        ruleHtml(pp >= 1, 'Must be ≥ 1') +
+        ruleHtml(ok_throughput, 'Fleet throughput (' + throughput.toFixed(0) + ') ' + (ok_throughput ? '≥' : '< ') + ' arrival demand (' + arrival.toFixed(0) + ')') +
+        '<div class="hint-rule info">ℹ Server speeds ~ Uniform(' + (pp*0.3).toFixed(1) + ', ' + (pp*1.7).toFixed(1) + ')</div>';
+    setValid('pg_PROCESSING_POWER', pp >= 1);
+
+    // MAX_QUEUE_LENGTH
+    r = document.getElementById('rule_MAX_QUEUE_LENGTH');
+    if (r) r.innerHTML =
+        ruleHtml(mq >= 10, 'Must be ≥ 10') +
+        ruleHtml(mq > sla, 'Must be > SLA threshold (' + sla + ')') +
+        ruleHtml(mq >= sla * 2, 'Ideally ≥ 2× SLA threshold (' + (sla*2) + ') for headroom');
+    setValid('pg_MAX_QUEUE_LENGTH', mq >= 10 && mq > sla);
+
+    // SLA_VIOLATION_LATENCY
+    r = document.getElementById('rule_SLA_VIOLATION_LATENCY');
+    if (r) r.innerHTML =
+        ruleHtml(sla >= 1, 'Must be ≥ 1') +
+        ruleHtml(sla < mq, 'Must be < max_queue_length (' + mq + ')');
+    setValid('pg_SLA_VIOLATION_LATENCY', sla >= 1 && sla < mq);
+
+    // EPISODE_LENGTH
+    r = document.getElementById('rule_EPISODE_LENGTH');
+    if (r) r.innerHTML =
+        ruleHtml(ep >= 10, 'Must be ≥ 10') +
+        '<div class="hint-rule info">ℹ Recommended: at least 5× avg steps to fill buffer. Min fill = ' + Math.ceil(bs * 2) + ' steps.</div>';
+    setValid('pg_EPISODE_LENGTH', ep >= 10);
+
+    // TRAIN_EPISODE_COUNT
+    r = document.getElementById('rule_TRAIN_EPISODE_COUNT');
+    if (r) r.innerHTML =
+        ruleHtml(eps >= 50, 'Must be ≥ 50') +
+        ruleHtml(eps >= 200, 'Recommended ≥ 200 for meaningful learning');
+    setValid('pg_TRAIN_EPISODE_COUNT', eps >= 50);
+
+    // GAMMA
+    r = document.getElementById('rule_GAMMA');
+    if (r) r.innerHTML =
+        ruleHtml(gam > 0 && gam < 1, 'Must be in (0, 1) — currently ' + gam);
+    setValid('pg_GAMMA', gam > 0 && gam < 1);
+
+    // LEARNING_RATE
+    r = document.getElementById('rule_LEARNING_RATE');
+    if (r) r.innerHTML =
+        ruleHtml(lr > 0, 'Must be > 0') +
+        ruleHtml(lr <= 0.01, 'Should be ≤ 0.01 (too high causes divergence)') +
+        ruleHtml(lr >= 0.00001, 'Should be ≥ 0.00001 (too low = no learning)');
+    setValid('pg_LEARNING_RATE', lr > 0 && lr <= 0.01 && lr >= 0.00001);
+
+    // BATCH_SIZE
+    r = document.getElementById('rule_BATCH_SIZE');
+    if (r) r.innerHTML =
+        ruleHtml(bs >= 8, 'Must be ≥ 8') +
+        ruleHtml(bs < buf, 'Must be < buffer size (' + buf + ')') +
+        ruleHtml(bs <= 512, 'Recommended ≤ 512');
+    setValid('pg_BATCH_SIZE', bs >= 8 && bs < buf);
+
+    // REPLAY_BUFFER_SIZE
+    r = document.getElementById('rule_REPLAY_BUFFER_SIZE');
+    if (r) r.innerHTML =
+        ruleHtml(buf > bs, 'Must be > batch size (' + bs + ')') +
+        ruleHtml(buf >= bs * 10, 'Recommended ≥ 10× batch size (' + (bs * 10) + ')');
+    setValid('pg_REPLAY_BUFFER_SIZE', buf > bs);
+
+    // EPSILON
+    r = document.getElementById('rule_EPSILON');
+    if (r) r.innerHTML =
+        ruleHtml(es > em, 'Start (' + es + ') must be > Min (' + em + ')') +
+        ruleHtml(es >= 0 && es <= 1, 'Start must be in [0, 1]') +
+        ruleHtml(em >= 0 && em < 1, 'Min must be in [0, 1)') +
+        ruleHtml(em > 0, 'Min > 0 recommended — zero epsilon = no exploration ever');
+    setValid('pg_EPSILON', es > em && es <= 1 && em >= 0);
+
+    // TARGET_UPDATE_STEPS
+    r = document.getElementById('rule_TARGET_UPDATE_STEPS');
+    if (r) r.innerHTML =
+        ruleHtml(tup >= 10, 'Must be ≥ 10') +
+        '<div class="hint-rule info">ℹ Recommended: 1–5× episode_length (' + ep + '). Suggested range: ' + Math.ceil(ep*0.5) + '–' + (ep*5) + '.</div>';
+    setValid('pg_TARGET_UPDATE_STEPS', tup >= 10);
+
+    // HIDDEN_DIM
+    r = document.getElementById('rule_HIDDEN_DIM');
+    if (r) r.innerHTML =
+        ruleHtml(hd >= 16, 'Must be ≥ 16') +
+        ruleHtml(hd >= stateSize * 2, 'Should be ≥ 2× state_size (state=' + stateSize + ', so ≥ ' + (stateSize*2) + ')') +
+        '<div class="hint-rule info">ℹ Action size = ' + actionSize + ', state size = ' + stateSize + ' for N=' + N + ' servers.</div>';
+    setValid('pg_HIDDEN_DIM', hd >= 16);
+
+    // Update throughput banner
+    updateThroughputHint();
+
+    // Validation summary
+    var invalids = document.querySelectorAll('#config-section .param-group.invalid');
+    var summary = document.getElementById('validation-summary');
+    if (invalids.length > 0) {
+        summary.style.display = 'block';
+        summary.textContent = '✗ ' + invalids.length + ' parameter(s) have validation errors. Review fields marked in red before training.';
+    } else {
+        summary.style.display = 'none';
+    }
+}
+
+function updateThroughputHint() {
+    var N   = iv('f_SERVER_COUNT');
+    var lam = iv('f_AVG_INCOMING_REQUESTS');
+    var wl  = iv('f_AVG_REQUEST_WORKLOAD');
+    var pp  = iv('f_PROCESSING_POWER');
+    var arrival    = lam * wl;
+    var throughput = N * pp;
+    var ok = throughput >= arrival;
+    var el = document.getElementById('throughput-hint');
+    if (!el) return;
+    el.innerHTML =
+        '⚡ <b>Heterogeneous fleet</b>: each server speed ~ Uniform(' + (pp*0.3).toFixed(1) + ', ' + (pp*1.7).toFixed(1) + '), mean=' + pp + '<br>' +
+        'Avg fleet throughput: <b>' + throughput + ' CPU/step</b> vs arrival demand: <b>' + arrival + ' CPU/step</b> — ' +
+        (ok ? '<span style="color:var(--green);">✓ can handle load</span>' : '<span style="color:var(--red);">✗ queues will grow</span>') +
+        '<br><span style="color:var(--text-dim);font-size:10px;">DQN sees server speeds in state — LC/RR/Random do not. This is the key advantage.</span>';
+    el.style.borderColor = ok ? 'rgba(0,229,255,.15)' : 'rgba(255,59,92,.2)';
+}
+
+// ── Devices ───────────────────────────────────────────────────────────────────
 async function loadDevices() {
     let devices;
-    try {
-        const resp = await fetch('/api/devices');
-        devices = await resp.json();
-    } catch(e) {
-        devices = [{ id:'cpu', label:'CPU', available:true, info:'Always available' }];
-    }
+    try { const r = await fetch('/api/devices'); devices = await r.json(); }
+    catch(e) { devices = [{id:'cpu',label:'CPU',available:true,info:'Always available'}]; }
     const container = document.getElementById('device-options');
     const scanLabel = document.getElementById('device-scan-label');
-    const nAvail = devices.filter(d => d.available).length;
-    scanLabel.textContent = nAvail + ' of ' + devices.length + ' device' + (devices.length !== 1 ? 's' : '') + ' available';
+    const nAvail    = devices.filter(d => d.available).length;
+    scanLabel.textContent = nAvail + ' of ' + devices.length + ' device' + (devices.length !== 1?'s':'') + ' available';
     scanLabel.style.color = nAvail > 1 ? 'var(--green)' : 'var(--text-dim)';
     const best = devices.find(d => d.available && d.id.startsWith('cuda'))
               || devices.find(d => d.available && d.id === 'mps')
@@ -675,291 +680,333 @@ async function loadDevices() {
     if (best) selectedDevice = best.id;
     container.innerHTML = '';
     devices.forEach(function(d) {
-        var isGPU  = d.id.startsWith('cuda');
-        var isMPS  = d.id === 'mps';
-        var isBest = best && d.id === best.id;
-        var iconClass = isGPU ? 'icon-gpu' : isMPS ? 'icon-mps' : 'icon-cpu';
-        var iconChar  = isGPU ? 'G' : isMPS ? 'M' : 'C';
+        var isGPU = d.id.startsWith('cuda'), isMPS = d.id === 'mps', isBest = best && d.id === best.id;
         var card = document.createElement('label');
         card.className = 'device-card' + (d.available ? '' : ' device-unavailable') + (isBest ? ' selected' : '');
         card.dataset.deviceId = d.id;
         card.innerHTML =
-            '<div class="device-icon ' + iconClass + '">' + iconChar + '</div>' +
-            '<input type="radio" name="DEVICE" value="' + d.id + '"' +
-                (!d.available ? ' disabled' : '') + (isBest ? ' checked' : '') + '>' +
-            '<div style="flex:1;min-width:0;">' +
-                '<div class="device-name">' + d.label +
-                    (d.available
-                        ? ' <span class="device-pill pill-available">available</span>'
-                        : ' <span class="device-pill pill-unavailable">unavailable</span>') +
-                    (isBest ? ' <span class="device-pill pill-best">recommended</span>' : '') +
-                '</div>' +
-                '<div class="device-info">' + d.info + '</div>' +
-            '</div>';
-        if (d.available) {
-            card.addEventListener('click', function() { selectDeviceCard(d.id); });
-        }
+            '<div class="device-icon ' + (isGPU ? 'icon-gpu' : isMPS ? 'icon-mps' : 'icon-cpu') + '">' + (isGPU ? 'G' : isMPS ? 'M' : 'C') + '</div>' +
+            '<input type="radio" name="DEVICE" value="' + d.id + '"' + (!d.available?' disabled':'') + (isBest?' checked':'') + '>' +
+            '<div style="flex:1;"><div class="device-name">' + d.label +
+                (d.available ? ' <span class="device-pill pill-available">available</span>' : ' <span class="device-pill pill-unavailable">unavailable</span>') +
+                (isBest ? ' <span class="device-pill pill-best">recommended</span>' : '') + '</div>' +
+            '<div class="device-info">' + d.info + '</div></div>';
+        if (d.available) card.addEventListener('click', function() { selectDeviceCard(d.id); });
         container.appendChild(card);
     });
 }
 
-function selectDeviceCard(deviceId) {
-    selectedDevice = deviceId;
-    document.querySelectorAll('#device-options .device-card').forEach(function(card) {
-        var isThis = card.dataset.deviceId === deviceId;
-        card.classList.toggle('selected', isThis);
-        var radio = card.querySelector('input[type="radio"]');
-        if (radio) radio.checked = isThis;
+function selectDeviceCard(id) {
+    selectedDevice = id;
+    document.querySelectorAll('#device-options .device-card').forEach(function(c) {
+        var is = c.dataset.deviceId === id;
+        c.classList.toggle('selected', is);
+        var r = c.querySelector('input[type="radio"]'); if (r) r.checked = is;
     });
 }
 
-// Collect all form values by element id (no <form> submit involved)
+// ── Config ─────────────────────────────────────────────────────────────────────
 function collectConfig() {
-    var INT_KEYS = ['SERVER_COUNT','MIN_SERVER_COUNT','MAX_SERVER_COUNT','AVG_INCOMING_REQUESTS',
-        'AVG_REQUEST_WORKLOAD','REQUEST_WORKLOAD_VARIANCE','MAX_SERVER_UTILIZATION','PROCESSING_POWER',
-        'MAX_QUEUE_LENGTH','SLA_VIOLATION_LATENCY','EPISODE_LENGTH','TRAIN_EPISODE_COUNT',
-        'BATCH_SIZE','REPLAY_BUFFER_SIZE','TARGET_UPDATE_STEPS','HIDDEN_DIM'];
-    var FLOAT_KEYS = ['GAMMA','LEARNING_RATE','EPSILON_START','EPSILON_MIN'];
-    var cfg = {};
-    INT_KEYS.forEach(function(k) {
-        var el = document.getElementById('f_' + k);
-        if (el) cfg[k] = parseInt(el.value) || 0;
-    });
-    FLOAT_KEYS.forEach(function(k) {
-        var el = document.getElementById('f_' + k);
-        if (el) cfg[k] = parseFloat(el.value) || 0;
-    });
-    cfg.AUTOSCALING = document.getElementById('f_AUTOSCALING').checked;
-    cfg.DEVICE = selectedDevice || 'cpu';
-    return cfg;
+    return {
+        SERVER_COUNT:              iv('f_SERVER_COUNT'),
+        AVG_INCOMING_REQUESTS:     iv('f_AVG_INCOMING_REQUESTS'),
+        AVG_REQUEST_WORKLOAD:      iv('f_AVG_REQUEST_WORKLOAD'),
+        REQUEST_WORKLOAD_VARIANCE: iv('f_REQUEST_WORKLOAD_VARIANCE'),
+        MAX_SERVER_UTILIZATION:    100,
+        PROCESSING_POWER:          iv('f_PROCESSING_POWER'),
+        MAX_QUEUE_LENGTH:          iv('f_MAX_QUEUE_LENGTH'),
+        SLA_VIOLATION_LATENCY:     iv('f_SLA_VIOLATION_LATENCY'),
+        EPISODE_LENGTH:            iv('f_EPISODE_LENGTH'),
+        TRAIN_EPISODE_COUNT:       iv('f_TRAIN_EPISODE_COUNT'),
+        GAMMA:                     iv('f_GAMMA'),
+        LEARNING_RATE:             iv('f_LEARNING_RATE'),
+        BATCH_SIZE:                iv('f_BATCH_SIZE'),
+        REPLAY_BUFFER_SIZE:        iv('f_REPLAY_BUFFER_SIZE'),
+        EPSILON_START:             iv('f_EPSILON_START'),
+        EPSILON_MIN:               iv('f_EPSILON_MIN'),
+        TARGET_UPDATE_STEPS:       iv('f_TARGET_UPDATE_STEPS'),
+        HIDDEN_DIM:                iv('f_HIDDEN_DIM'),
+        DEVICE:                    selectedDevice,
+    };
 }
 
-// Start training — called by button onclick, never by form submit
+// ── Training controls ─────────────────────────────────────────────────────────
 async function startTraining() {
-    var btn = document.getElementById('train-btn');
-    btn.disabled = true;
-    btn.innerHTML = 'Starting...';
-
-    var cfg = collectConfig();
-    console.log('Config to send:', JSON.stringify(cfg));
-
-    var resp, result;
-    try {
-        resp = await fetch('/api/start_training', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cfg)
-        });
-        result = await resp.json();
-        console.log('start_training response:', result);
-    } catch(netErr) {
-        alert('Network error contacting server: ' + netErr.message);
-        btn.disabled = false;
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Training';
+    runAllValidations();
+    var invalids = document.querySelectorAll('#config-section .param-group.invalid');
+    if (invalids.length > 0) {
+        document.getElementById('validation-summary').style.display = 'block';
+        invalids[0].scrollIntoView({behavior:'smooth', block:'center'});
         return;
     }
-
-    if (!resp.ok) {
-        alert('Server error: ' + (result.error || JSON.stringify(result)));
-        btn.disabled = false;
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Training';
-        return;
+    const cfg = collectConfig();
+    document.getElementById('train-btn').disabled = true;
+    const resp = await fetch('/api/start_training', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)
+    });
+    const data = await resp.json();
+    if (data.status === 'started' || data.status === 'already_running') {
+        showProgressSection(cfg.TRAIN_EPISODE_COUNT, selectedDevice);
+        startPolling();
     }
-
-    // Polling starts BEFORE chart init — charts can never block polling
-    startPolling();
-    showProgressSection(cfg.TRAIN_EPISODE_COUNT, cfg.DEVICE);
-
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Training';
 }
 
-function showProgressSection(totalEpisodes, device) {
-    document.getElementById('config-section').style.display   = 'none';
+async function stopTraining() { await fetch('/api/stop_training', {method:'POST'}); }
+
+function showProgressSection(total, device) {
+    document.getElementById('config-section').style.display = 'none';
     document.getElementById('progress-section').style.display = 'block';
-    document.getElementById('stat-episode-total').textContent = 'of ' + (totalEpisodes || '?');
+    document.getElementById('stat-ep-of').textContent = 'of ' + total;
     renderDeviceStat(device);
-    if (!chartsInitialized) {
-        try {
-            initCharts();
-            chartsInitialized = true;
-        } catch(chartErr) {
-            console.error('Chart init error (non-fatal, polling continues):', chartErr);
-        }
-    }
+    if (!chartsInitialized) initCharts();
 }
 
+function resetToConfig() {
+    document.getElementById('config-section').style.display = 'block';
+    document.getElementById('progress-section').style.display = 'none';
+    document.getElementById('post-training').style.display = 'none';
+    document.getElementById('train-btn').disabled = false;
+    clearInterval(pollInterval); pollInterval = null;
+    [rewardChart, avgRewardChart, qvalChart, qspreadChart].forEach(function(c){ if(c){c.destroy();} });
+    rewardChart = avgRewardChart = qvalChart = qspreadChart = null;
+    chartsInitialized = false;
+    currentActionMap = [];
+}
+
+function renderDeviceStat(device) {
+    var el = document.getElementById('stat-device');
+    var sub = document.getElementById('stat-device-sub');
+    if (!el) return;
+    if (device && device.startsWith('cuda')) { el.textContent='CUDA'; el.style.color='var(--accent2)'; if(sub)sub.textContent='NVIDIA CUDA GPU'; }
+    else if (device === 'mps')               { el.textContent='MPS';  el.style.color='var(--accent3)'; if(sub)sub.textContent='Apple Silicon GPU'; }
+    else                                     { el.textContent='CPU';  el.style.color='var(--accent)';  if(sub)sub.textContent='CPU compute'; }
+}
+
+// ── Polling ─────────────────────────────────────────────────────────────────
 function startPolling() {
-    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-    pollInterval = setInterval(async function() {
-        try {
-            var resp = await fetch('/api/training_status');
-            var data = await resp.json();
-            updateUI(data);
-        } catch(e) { console.warn('Poll failed:', e); }
+    if (pollInterval) return;
+    pollInterval = setInterval(async () => {
+        try { const r = await fetch('/api/training_status'); updateUI(await r.json()); } catch(e) {}
     }, 1500);
-    console.log('Polling started, interval:', pollInterval);
+}
+
+// ── Action label helper ──────────────────────────────────────────────────────
+function actionLabel(idx, amap) {
+    if (!amap || idx >= amap.length) return 'A' + idx;
+    var pair = amap[idx];
+    if (!pair) return 'A' + idx;
+    var a = pair[0], b = pair[1];
+    return a === b ? 'S' + a : 'S' + a + '↔S' + b;
 }
 
 function updateUI(data) {
-    var ep      = data.episode        || 0;
-    var total   = data.total_episodes || 0;
-    var rewards = data.rewards        || [];
-    var eps     = data.epsilon;
+    // Store action map for label decoding
+    if (data.action_map && data.action_map.length > 0) currentActionMap = data.action_map;
 
-    document.getElementById('stat-episode').textContent       = ep;
-    document.getElementById('stat-episode-total').textContent = 'of ' + total;
-    document.getElementById('stat-epsilon').textContent       = (typeof eps === 'number') ? eps.toFixed(3) : '--';
+    var ep    = data.episode || 0;
+    var total = data.total_episodes || 500;
+    var pct   = total > 0 ? Math.min(100, Math.round(ep / total * 100)) : 0;
 
-    var pct = total > 0 ? Math.round((ep / total) * 100) : 0;
-    document.getElementById('progress-pct').textContent = pct + '%';
+    document.getElementById('stat-episode').textContent = ep;
+    document.getElementById('stat-ep-of').textContent   = 'of ' + total;
+    document.getElementById('ep-badge').textContent     = 'EPISODE ' + ep + ' / ' + total;
     document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('progress-pct').textContent = pct + '%';
 
+    var rewards = data.rewards || [];
+    if (rewards.length) {
+        document.getElementById('stat-reward').textContent = rewards[rewards.length-1].toFixed(0);
+        var w20 = rewards.slice(-20);
+        document.getElementById('stat-avg-reward').textContent = (w20.reduce(function(a,b){return a+b;},0)/w20.length).toFixed(0);
+    }
+    if (data.epsilon !== undefined) document.getElementById('stat-epsilon').textContent = data.epsilon.toFixed(3);
     if (data.device) renderDeviceStat(data.device);
 
-    if (rewards.length > 0) {
-        var last = rewards[rewards.length - 1];
-        var rEl = document.getElementById('stat-reward');
-        rEl.textContent = last.toFixed(0);
-        rEl.style.color = last >= 0 ? 'var(--green)' : 'var(--red)';
-
-        var win20 = rewards.slice(-20);
-        var avg = win20.reduce(function(a,b){return a+b;}, 0) / win20.length;
-        var aEl = document.getElementById('stat-avg-reward');
-        aEl.textContent = avg.toFixed(0);
-        aEl.style.color = avg >= 0 ? 'var(--green)' : 'var(--red)';
-
-        var offset = Math.max(0, ep - rewards.length);
-        var labels = rewards.map(function(_,i){ return offset + i + 1; });
-
-        try {
-            if (rewardChart) {
-                rewardChart.data.labels = labels;
-                rewardChart.data.datasets[0].data = rewards;
-                rewardChart.update('none');
-            }
-            if (avgRewardChart) {
-                var rolling = rewards.map(function(_,i) {
-                    var sl = rewards.slice(Math.max(0,i-19), i+1);
-                    return sl.reduce(function(a,b){return a+b;},0) / sl.length;
-                });
-                avgRewardChart.data.labels = labels;
-                avgRewardChart.data.datasets[0].data = rolling;
-                avgRewardChart.update('none');
-            }
-        } catch(chartUpdateErr) { console.warn('Chart update error:', chartUpdateErr); }
+    if (chartsInitialized && rewards.length) {
+        var labels = rewards.map(function(_,i){return i+1;});
+        rewardChart.data.labels = labels;
+        rewardChart.data.datasets[0].data = rewards;
+        rewardChart.update('none');
+        var avgs = rewards.map(function(_,i){
+            var w = rewards.slice(Math.max(0,i-19),i+1);
+            return w.reduce(function(a,b){return a+b;},0)/w.length;
+        });
+        avgRewardChart.data.labels = labels;
+        avgRewardChart.data.datasets[0].data = avgs;
+        avgRewardChart.update('none');
     }
 
+    // Q-value chart with action pair labels
     try {
         if (qvalChart && data.q_values && data.q_values.length > 0) {
-            qvalChart.data.labels = data.q_values.map(function(_,i){ return 'A'+i; });
-            qvalChart.data.datasets[0].data = data.q_values;
+            var qv = data.q_values;
+            var amap = currentActionMap;
+            var bestIdx = qv.indexOf(Math.max.apply(null, qv));
+            // Only label every Nth bar when there are many actions
+            var n = qv.length;
+            var step = n > 30 ? Math.ceil(n / 20) : 1;
+            qvalChart.data.labels = qv.map(function(_, i) {
+                return (i % step === 0 || i === bestIdx) ? actionLabel(i, amap) : '';
+            });
+            qvalChart.data.datasets[0].data = qv;
+            qvalChart.data.datasets[0].backgroundColor = qv.map(function(_, i) {
+                return i === bestIdx ? '#ffffff' : 'rgba(0,229,255,.45)';
+            });
             qvalChart.update('none');
         }
-    } catch(e) { console.warn('Q-value chart error:', e); }
+        if (qspreadChart && data.q_history && data.q_history.length > 0) {
+            var hist = data.q_history;
+            qspreadChart.data.labels = hist.map(function(h){return h.ep;});
+            qspreadChart.data.datasets[0].data = hist.map(function(h){return h.spread;});
+            qspreadChart.update('none');
+        }
+        if (data.q_meta) {
+            var m = data.q_meta;
+            var amap2 = currentActionMap;
+            // Use decoded pair from snapshot if available
+            var bestLabel;
+            if (m.best_a !== undefined && m.best_b !== undefined) {
+                bestLabel = m.best_a === m.best_b ? 'SERVER ' + m.best_a : 'S' + m.best_a + ' ↔ S' + m.best_b;
+            } else {
+                bestLabel = actionLabel(m.best, amap2);
+            }
+            document.getElementById('qv-best-action').textContent = bestLabel;
+            document.getElementById('qv-best-type').textContent   =
+                (m.best_a !== undefined && m.best_a === m.best_b) ? 'single server' : 'server pair';
+            document.getElementById('qv-max').textContent    = m.max.toFixed(2);
+            document.getElementById('qv-min').textContent    = m.min.toFixed(2);
+            document.getElementById('qv-spread').textContent = m.spread.toFixed(2);
+
+            // Health badge
+            var badge = document.getElementById('qv-health-badge');
+            var hint  = document.getElementById('qv-health-hint');
+            var hist2 = data.q_history || [];
+            var eps   = data.epsilon || 1.0;
+            var prog  = ep / (total || 500);
+            if (hist2.length < 3) {
+                badge.className = 'badge badge-idle'; badge.textContent = 'waiting';
+                if (hint) hint.textContent = 'need more data';
+            } else {
+                var recS  = hist2.slice(-6).map(function(h){return h.spread;});
+                var avgSp = recS.reduce(function(a,b){return a+b;},0) / recS.length;
+                var half  = Math.floor(hist2.length/2);
+                var avgF2 = hist2.slice(0,half).reduce(function(a,h){return a+h.spread;},0)/(half||1);
+                var avgS2 = hist2.slice(half).reduce(function(a,h){return a+h.spread;},0)/((hist2.length-half)||1);
+                var growing   = avgS2 > avgF2 * 1.1;
+                var rews      = data.rewards || [];
+                var recAvg    = rews.slice(-20).reduce(function(a,b){return a+b;},0) / (Math.min(20,rews.length)||1);
+                var earAvg    = rews.slice(-40,-20).reduce(function(a,b){return a+b;},0) / (Math.min(20,rews.slice(-40,-20).length)||1);
+                var improving = recAvg > earAvg * 0.9;
+                badge.style.cssText = '';
+                if (avgSp < 0.5 && prog > 0.3) {
+                    badge.className = 'badge badge-error'; badge.textContent = 'not learning';
+                    if (hint) hint.textContent = 'Q spread flat — check LR & buffer';
+                } else if (growing && improving) {
+                    badge.className = 'badge badge-running'; badge.textContent = 'learning ↑';
+                    if (hint) hint.textContent = 'spread & reward improving ✓';
+                } else if (!growing && improving && prog > 0.5) {
+                    badge.className = 'badge badge-done'; badge.textContent = 'converging';
+                    if (hint) hint.textContent = 'reward improving, spread settling ✓';
+                } else if (prog < 0.3) {
+                    badge.className = 'badge badge-running'; badge.textContent = 'early training';
+                    if (hint) hint.textContent = 'ε=' + eps.toFixed(2);
+                } else {
+                    badge.className = 'badge badge-idle'; badge.textContent = 'progressing';
+                    if (hint) hint.textContent = 'spread: ' + avgSp.toFixed(1);
+                }
+            }
+        }
+    } catch(e) { console.warn('Q chart:', e); }
 
     if (data.error) {
-        document.getElementById('status-text').textContent = 'Error';
-        document.getElementById('status-badge').className  = 'badge badge-error';
-        document.getElementById('error-box').style.display = 'flex';
+        document.getElementById('error-box').style.display = 'block';
         document.getElementById('error-text').textContent  = data.error;
+    }
+    if (data.done && !data.running) {
         clearInterval(pollInterval); pollInterval = null;
         document.getElementById('stop-btn').style.display  = 'none';
         document.getElementById('reset-btn').style.display = 'inline-flex';
-    } else if (data.done) {
-        document.getElementById('status-text').textContent     = 'Complete';
-        document.getElementById('status-badge').className      = 'badge badge-done';
         document.getElementById('post-training').style.display = 'block';
-        document.getElementById('stop-btn').style.display      = 'none';
-        document.getElementById('reset-btn').style.display     = 'inline-flex';
-        clearInterval(pollInterval); pollInterval = null;
-    } else if (data.running) {
-        document.getElementById('status-text').textContent = 'Episode ' + ep + ' / ' + total;
+        generatePostTrainingAdvice(data);
     }
 }
 
+function generatePostTrainingAdvice(data) {
+    var el = document.getElementById('post-training-advice');
+    if (!el || !data.rewards || data.rewards.length < 10) return;
+    var rewards = data.rewards;
+    var last40  = rewards.slice(-40);
+    var avgF    = last40.slice(0,20).reduce(function(a,b){return a+b;},0) / 20;
+    var avgS    = last40.slice(20).reduce(function(a,b){return a+b;},0) / 20;
+    var rising  = avgS > avgF * 1.05;
+    var impr    = avgF !== 0 ? ((avgS-avgF)/Math.abs(avgF)*100).toFixed(1) : 0;
+    var hist    = data.q_history || [];
+    var avgSp   = hist.slice(-6).reduce(function(a,h){return a+h.spread;},0) / (Math.min(6,hist.length)||1);
+    var lines   = [];
+    if (rising) {
+        lines.push('<div style="padding:8px 10px;border-radius:6px;background:rgba(255,214,0,0.08);border:1px solid rgba(255,214,0,0.2);margin-bottom:6px;">' +
+            '<span style="color:var(--yellow);font-weight:600;">⚠ Reward still improving (+' + impr + '% in last 40 episodes)</span><br>' +
+            '<span style="color:var(--text-dim);">Training had not plateaued — try 100–200 more episodes.</span></div>');
+    } else {
+        lines.push('<div style="padding:8px 10px;border-radius:6px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);margin-bottom:6px;">' +
+            '<span style="color:var(--green);font-weight:600;">✓ Reward plateaued — model likely converged.</span></div>');
+    }
+    lines.push('<div style="font-size:11px;">' + (avgSp > 5
+        ? '<span style="color:var(--green);">✓ Healthy Q-spread (' + avgSp.toFixed(1) + ')</span> — agent differentiates between action pairs.'
+        : '<span style="color:var(--yellow);">△ Low Q-spread (' + avgSp.toFixed(1) + ')</span> — agent uncertain. Try lower LR or more episodes.') + '</div>');
+    el.innerHTML = '<div style="font-weight:600;color:var(--text);margin-bottom:10px;font-size:12px;">Training Assessment</div>' + lines.join('');
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
 function initCharts() {
+    chartsInitialized = true;
     var sc = {
         x: { ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}}, grid:{color:'#1e2330'} },
         y: { ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}}, grid:{color:'#1e2330'} }
     };
-    var base = { responsive:true, animation:false, plugins:{legend:{display:false}}, scales:sc };
-
     rewardChart = new Chart(document.getElementById('reward-chart'), {
-        type:'line',
-        data:{ labels:[], datasets:[{ data:[], borderColor:'#7c4dff',
-            backgroundColor:'rgba(124,77,255,.05)', borderWidth:1.5, pointRadius:0, tension:.3 }] },
-        options: base
+        type:'line', data:{labels:[],datasets:[{data:[],borderColor:'#7c4dff',borderWidth:1.5,pointRadius:0,tension:.3,fill:false}]},
+        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:sc}
     });
-
     avgRewardChart = new Chart(document.getElementById('avg-reward-chart'), {
-        type:'line',
-        data:{ labels:[], datasets:[{ data:[], borderColor:'#00e5ff',
-            backgroundColor:'rgba(0,229,255,.05)', borderWidth:2, pointRadius:0, tension:.4 }] },
-        options: base
+        type:'line', data:{labels:[],datasets:[{data:[],borderColor:'#00e5ff',borderWidth:2,pointRadius:0,tension:.5,fill:false}]},
+        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:sc}
     });
-
-    // Q-value bar chart — use a plain string color, NOT a callback (callbacks crash on empty data)
     qvalChart = new Chart(document.getElementById('qval-chart'), {
-        type:'bar',
-        data:{ labels:[], datasets:[{ data:[], backgroundColor:'rgba(0,229,255,.6)', borderRadius:3 }] },
-        options: {
-            responsive:true, animation:false,
-            plugins:{ legend:{display:false} },
-            scales:{
-                x: sc.x,
-                y: { ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},
-                     grid:{color:'#1e2330'},
-                     title:{display:true,text:'Q-value',color:'#6b7590',font:{size:9}} }
+        type:'bar', data:{labels:[],datasets:[{data:[],backgroundColor:'rgba(0,229,255,.45)',borderRadius:2}]},
+        options:{responsive:true,animation:false,plugins:{legend:{display:false},tooltip:{callbacks:{
+            label:function(ctx) {
+                var i = ctx.dataIndex;
+                var lbl = actionLabel(i, currentActionMap);
+                return ctx.parsed.y.toFixed(3) + '  [' + lbl + ']';
             }
+        }}},scales:{x:sc.x,y:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},grid:{color:'#1e2330'},title:{display:true,text:'Q-value',color:'#6b7590',font:{size:9}}}}}
+    });
+    qspreadChart = new Chart(document.getElementById('qspread-chart'), {
+        type:'line', data:{labels:[],datasets:[{data:[],borderColor:'#ffd600',backgroundColor:'rgba(255,214,0,.05)',borderWidth:2,pointRadius:0,tension:.4}]},
+        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{x:sc.x,y:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},grid:{color:'#1e2330'},title:{display:true,text:'Max − Min Q',color:'#6b7590',font:{size:9}},min:0}}}
+    });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+    loadDevices();
+    runAllValidations();
+    // Re-validate on any input change
+    document.querySelectorAll('#config-section input').forEach(function(el) {
+        el.addEventListener('input', runAllValidations);
+    });
+    // Resume polling if training already running
+    try {
+        const r = await fetch('/api/training_status');
+        const d = await r.json();
+        if (d.action_map) currentActionMap = d.action_map;
+        if (d.running || (d.episode > 0 && !d.done)) {
+            showProgressSection(d.total_episodes, d.device || 'cpu');
+            startPolling();
+            updateUI(d);
         }
-    });
-}
-
-// Update Q-value bar colors after data is set (safe — runs after data exists)
-function updateQvalColors() {
-    if (!qvalChart || !qvalChart.data.datasets[0].data.length) return;
-    qvalChart.data.datasets[0].backgroundColor = qvalChart.data.datasets[0].data.map(function(v) {
-        return v >= 0 ? 'rgba(0,255,136,.7)' : 'rgba(255,59,92,.7)';
-    });
-    qvalChart.update('none');
-}
-
-function renderDeviceStat(device) {
-    if (!device) return;
-    var el  = document.getElementById('stat-device');
-    var sub = document.getElementById('stat-device-sub');
-    var d   = device.toLowerCase();
-    if (d.startsWith('cuda')) {
-        el.textContent = device.toUpperCase(); el.style.color = 'var(--accent2)'; sub.textContent = 'NVIDIA CUDA GPU';
-    } else if (d === 'mps') {
-        el.textContent = 'MPS'; el.style.color = 'var(--accent3)'; sub.textContent = 'Apple Metal GPU';
-    } else {
-        el.textContent = 'CPU'; el.style.color = 'var(--accent)'; sub.textContent = 'Central processor';
-    }
-}
-
-async function stopTraining() {
-    await fetch('/api/stop_training', { method:'POST' });
-    document.getElementById('status-text').textContent  = 'Stopped';
-    document.getElementById('status-badge').className   = 'badge badge-idle';
-    document.getElementById('stop-btn').style.display   = 'none';
-    document.getElementById('reset-btn').style.display  = 'inline-flex';
-    clearInterval(pollInterval); pollInterval = null;
-}
-
-function resetToConfig() {
-    clearInterval(pollInterval); pollInterval = null;
-    chartsInitialized = false;
-    if (rewardChart)    { rewardChart.destroy();    rewardChart    = null; }
-    if (avgRewardChart) { avgRewardChart.destroy(); avgRewardChart = null; }
-    if (qvalChart)      { qvalChart.destroy();      qvalChart      = null; }
-    document.getElementById('progress-section').style.display  = 'none';
-    document.getElementById('post-training').style.display     = 'none';
-    document.getElementById('error-box').style.display         = 'none';
-    document.getElementById('config-section').style.display    = 'block';
-    document.getElementById('stop-btn').style.display          = 'inline-flex';
-    document.getElementById('reset-btn').style.display         = 'none';
-}
+    } catch(e) {}
+});
 </script>
 {% endblock %}
