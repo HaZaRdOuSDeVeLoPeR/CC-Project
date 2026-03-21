@@ -73,16 +73,16 @@ templates/              → UI (Jinja2 + Chart.js)
 
 ## 📊 Experimental Insights
 
-### 🔹 Under Low Load (λ ≈ 5)
+### 🔹 Under Low Load (≤50% Utilization)
 - Classical methods perform competitively
 - System is underutilized
 - RL offers marginal improvement
 
-### 🔹 Under Moderate Load (λ ≈ 8–10)
+### 🔹 Under Moderate Load (50-75% Utilization)
 - DQN begins to outperform baselines
 - Better load distribution
 
-### 🔹 Under High Load (λ ≥ 10)
+### 🔹 Under High Load (≥75% Utilization or Overload)
 - LC becomes unstable (high SLA violations)
 - DQN maintains:
   - Lower latency
