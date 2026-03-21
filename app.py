@@ -43,12 +43,18 @@ DEFAULT_CFG = {
 }
 
 # ── Load persisted training config on startup ─────────────────────────────────
+# configuration.py is the source of truth. The saved JSON only fills keys that
+# are absent from DEFAULT_CFG (there are none currently, but this keeps the
+# pattern correct for future additions). It must NEVER overwrite configuration.py.
 _saved_cfg_path = "./artifacts/last_train_config.json"
 if os.path.exists(_saved_cfg_path):
     try:
         with open(_saved_cfg_path) as f:
             _saved = json.load(f)
-        DEFAULT_CFG.update(_saved)
+        # Only apply saved values for keys not already set by configuration.py
+        for k, v in _saved.items():
+            if k not in DEFAULT_CFG:
+                DEFAULT_CFG[k] = v
     except Exception:
         pass
 

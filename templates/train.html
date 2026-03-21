@@ -378,6 +378,14 @@
         </div>
     </div>
 
+    <!-- Parameter Health Panel -->
+    <div class="card" id="health-panel" style="margin-bottom:1.5rem;">
+        <div class="card-label">Parameter Health Check
+            <span style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">— updates live as you change values</span>
+        </div>
+        <div id="health-rows" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
     <!-- Validation summary + Start button -->
     <div id="validation-summary" style="display:none;margin-bottom:1rem;padding:10px 14px;border-radius:6px;background:rgba(255,59,92,.06);border:1px solid rgba(255,59,92,.3);font-size:11px;color:var(--red);"></div>
 
@@ -636,6 +644,9 @@ function runAllValidations() {
     // Update throughput banner
     updateThroughputHint();
 
+    // Health panel
+    computeHealthPanel(N, lam, wl, wlv, pp, mq, sla, ep, eps, gam, lr, bs, buf, es, em, tup, hd);
+
     // Validation summary
     var invalids = document.querySelectorAll('#config-section .param-group.invalid');
     var summary = document.getElementById('validation-summary');
@@ -645,6 +656,138 @@ function runAllValidations() {
     } else {
         summary.style.display = 'none';
     }
+}
+
+function statusChip(ok, text) {
+    var color  = ok ? 'var(--green)' : 'var(--red)';
+    var bg     = ok ? 'rgba(0,255,136,0.08)' : 'rgba(255,59,92,0.08)';
+    var border = ok ? 'rgba(0,255,136,0.25)' : 'rgba(255,59,92,0.25)';
+    return '<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:'+bg+';color:'+color+';border:1px solid '+border+';font-weight:600;">'+(ok?'✓':'✗')+' '+text+'</span>';
+}
+
+function computeHealthPanel(N, lam, wl, wlv, pp, mq, sla, ep, eps, gam, lr, bs, buf, es, em, tup, hd) {
+    var stateSize       = N * 3 + 2;
+    var arrival         = lam * wl;
+    var peakArrival     = lam * (wl + wlv);
+    var throughput      = N * pp;
+    var utilPct         = throughput > 0 ? (arrival / throughput * 100) : 999;
+    var peakUtilPct     = throughput > 0 ? (peakArrival / throughput * 100) : 999;
+    var slaRatio        = mq > 0 ? (sla / mq * 100) : 0;
+    var totalSteps      = eps * ep;
+    var bufEpisodes     = (ep > 0 && lam > 0) ? (buf / (ep * lam)).toFixed(1) : '?';
+    var decayPerEp      = Math.pow(Math.max(0.0001,em) / Math.max(0.0001,es), 1 / Math.max(1,eps));
+    var greedyEp        = es > em && decayPerEp < 1
+        ? Math.round(Math.log(0.1 / Math.max(0.001,es)) / Math.log(decayPerEp))
+        : eps;
+    var targetUpdPerEp  = ep > 0 ? (ep / Math.max(1,tup)).toFixed(1) : '?';
+    var recLambda       = Math.max(1, Math.floor(throughput * 0.7 / Math.max(1, wl)));
+
+    var checks = [
+        {
+            label: 'Throughput balance',
+            desc:  'λ × workload vs fleet throughput (N × proc_power)',
+            val:   arrival.toFixed(0) + ' CPU/step arriving vs ' + throughput + ' capacity (' + utilPct.toFixed(0) + '% utilization)',
+            ok:    utilPct < 90,
+            tip:   utilPct >= 90 ? 'Reduce AVG_INCOMING_REQUESTS or increase PROCESSING_POWER. Recommended λ for 70% load: ' + recLambda : null
+        },
+        {
+            label: 'Peak burst headroom',
+            desc:  'Worst-case step: λ × (workload + variance)',
+            val:   peakArrival.toFixed(0) + ' CPU/step peak vs ' + throughput + ' capacity (' + peakUtilPct.toFixed(0) + '%)',
+            ok:    peakUtilPct <= 120,
+            tip:   peakUtilPct > 120 ? 'Reduce REQUEST_WORKLOAD_VARIANCE or increase PROCESSING_POWER / SERVER_COUNT' : null
+        },
+        {
+            label: 'SLA threshold placement',
+            desc:  'SLA should trigger well before queue fills',
+            val:   'SLA=' + sla + ', queue cap=' + mq + ' (' + slaRatio.toFixed(0) + '% of cap)',
+            ok:    sla < mq * 0.8 && sla > pp,
+            tip:   sla >= mq * 0.8 ? 'Increase MAX_QUEUE_LENGTH to ≥ ' + (sla * 3) + ' (3× SLA)' : (sla <= pp ? 'Increase SLA_VIOLATION_LATENCY above PROCESSING_POWER (' + pp + ')' : null)
+        },
+        {
+            label: 'Variance < workload',
+            desc:  'Prevents zero or negative workload requests',
+            val:   'variance=' + wlv + ' vs workload=' + wl,
+            ok:    wlv < wl,
+            tip:   wlv >= wl ? 'Reduce REQUEST_WORKLOAD_VARIANCE to < ' + wl : null
+        },
+        {
+            label: 'Replay buffer coverage',
+            desc:  'Buffer should cover several episodes of experience',
+            val:   buf.toLocaleString() + ' transitions ≈ ' + bufEpisodes + ' episodes',
+            ok:    parseFloat(bufEpisodes) >= 5,
+            tip:   parseFloat(bufEpisodes) < 5 ? 'Increase REPLAY_BUFFER_SIZE to ≥ ' + (10 * ep * lam).toLocaleString() : null
+        },
+        {
+            label: 'Batch vs buffer ratio',
+            desc:  'Batch must be much smaller than replay buffer',
+            val:   'batch=' + bs + ' / buffer=' + buf.toLocaleString() + ' (' + (bs/buf*100).toFixed(1) + '%)',
+            ok:    bs < buf * 0.1,
+            tip:   bs >= buf * 0.1 ? 'Increase REPLAY_BUFFER_SIZE to ≥ ' + (bs * 20).toLocaleString() : null
+        },
+        {
+            label: 'Hidden dim vs state size',
+            desc:  'Network should be wide enough to represent the state',
+            val:   'state=' + stateSize + ' dims (N×3+2), hidden=' + hd,
+            ok:    hd >= stateSize * 2,
+            tip:   hd < stateSize * 2 ? 'Increase HIDDEN_DIM to ≥ ' + (stateSize * 2) : null
+        },
+        {
+            label: 'Exploration schedule',
+            desc:  'Agent should explore meaningfully before converging',
+            val:   'ε: ' + es + ' → ' + em + ' over ' + eps + ' eps, mostly greedy by ep ' + Math.min(greedyEp, eps),
+            ok:    greedyEp < eps * 0.85 && greedyEp > eps * 0.1,
+            tip:   greedyEp >= eps * 0.85 ? 'Increase TRAIN_EPISODE_COUNT or widen ε range (lower EPSILON_MIN)' :
+                   greedyEp <= eps * 0.1 ? 'Widen ε range or reduce EPSILON_MIN — agent converges too quickly' : null
+        },
+        {
+            label: 'Target network update rate',
+            desc:  'Target net should sync roughly 1–5× per episode',
+            val:   'every ' + tup + ' steps = ' + targetUpdPerEp + '× per episode',
+            ok:    parseFloat(targetUpdPerEp) >= 0.5 && parseFloat(targetUpdPerEp) <= 10,
+            tip:   parseFloat(targetUpdPerEp) < 0.5 ? 'Decrease TARGET_UPDATE_STEPS — currently syncing less than once per episode' :
+                   parseFloat(targetUpdPerEp) > 10  ? 'Increase TARGET_UPDATE_STEPS — too many syncs per episode can destabilise training' : null
+        },
+        {
+            label: 'Training length',
+            desc:  'Total training steps across all episodes',
+            val:   eps + ' episodes × ' + ep + ' steps = ' + totalSteps.toLocaleString() + ' total steps',
+            ok:    eps >= 200,
+            tip:   eps < 200 ? 'Increase TRAIN_EPISODE_COUNT to ≥ 200 for meaningful convergence' : null
+        },
+    ];
+
+    var passCount = checks.filter(function(c){ return c.ok; }).length;
+    var panel = document.getElementById('health-rows');
+    if (!panel) return;
+
+    var summaryColor = passCount === checks.length ? 'var(--green)' : passCount >= checks.length * 0.75 ? 'var(--yellow)' : 'var(--red)';
+    var summaryText  = passCount === checks.length
+        ? 'All checks pass — configuration looks healthy'
+        : passCount >= checks.length * 0.75
+        ? 'Minor issues — training will work but may be suboptimal'
+        : 'Multiple issues detected — review red items before training';
+
+    var html = '<div style="font-size:11px;padding:8px 12px;border-radius:6px;background:rgba(0,0,0,0.15);color:'+summaryColor+';font-weight:500;margin-bottom:8px;">'
+        + passCount + '/' + checks.length + ' checks passed — ' + summaryText + '</div>';
+
+    html += checks.map(function(c) {
+        var color  = c.ok ? 'var(--green)' : 'var(--red)';
+        var bg     = c.ok ? 'rgba(0,255,136,0.04)' : 'rgba(255,59,92,0.04)';
+        var border = c.ok ? 'rgba(0,255,136,0.15)' : 'rgba(255,59,92,0.2)';
+        return '<div style="display:flex;align-items:flex-start;gap:12px;padding:8px 12px;border-radius:6px;background:'+bg+';border:1px solid '+border+';">'
+            + '<span style="color:'+color+';flex-shrink:0;font-size:12px;margin-top:1px;">'+(c.ok?'✓':'✗')+'</span>'
+            + '<div style="flex:1;min-width:0;">'
+            +   '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">'
+            +     '<span style="font-size:11px;font-weight:500;color:var(--text);">'+c.label+'</span>'
+            +     '<span style="font-size:10px;color:var(--text-muted);">'+c.desc+'</span>'
+            +   '</div>'
+            +   '<div style="font-size:11px;color:'+color+';font-family:JetBrains Mono,monospace;margin-top:2px;">'+c.val+'</div>'
+            +   (c.tip ? '<div style="font-size:10px;color:var(--yellow);margin-top:3px;">→ '+c.tip+'</div>' : '')
+            + '</div></div>';
+    }).join('');
+
+    panel.innerHTML = html;
 }
 
 function updateThroughputHint() {
@@ -819,13 +962,15 @@ function updateUI(data) {
     if (data.device) renderDeviceStat(data.device);
 
     if (chartsInitialized && rewards.length) {
-        // type:'linear' requires {x,y} point objects — parallel labels array is ignored
-        var rewardPoints = rewards.map(function(r, i) { return {x: i + 1, y: r}; });
+        // ep is the latest episode number; rewards holds the last N entries (up to 200).
+        // So the first reward in the window belongs to episode (ep - N + 1), not episode 1.
+        var windowStart = ep - rewards.length + 1;
+        var rewardPoints = rewards.map(function(r, i) { return {x: windowStart + i, y: r}; });
         rewardChart.data.datasets[0].data = rewardPoints;
         rewardChart.update('none');
         var avgPoints = rewards.map(function(_, i) {
             var w = rewards.slice(Math.max(0, i - 19), i + 1);
-            return {x: i + 1, y: w.reduce(function(a, b) { return a + b; }, 0) / w.length};
+            return {x: windowStart + i, y: w.reduce(function(a, b) { return a + b; }, 0) / w.length};
         });
         avgRewardChart.data.datasets[0].data = avgPoints;
         avgRewardChart.update('none');
@@ -973,11 +1118,17 @@ function initCharts() {
                 var lbl = actionLabel(i);
                 return ctx.parsed.y.toFixed(3) + '  [' + lbl + ']';
             }
-        }}},scales:{x:xScale(),y:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},grid:{color:'#1e2330'},title:{display:true,text:'Q-value',color:'#6b7590',font:{size:9}}}}}
+        }}},scales:{
+            x:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9},maxRotation:0},grid:{color:'#1e2330'}},
+            y:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},grid:{color:'#1e2330'},title:{display:true,text:'Q-value',color:'#6b7590',font:{size:9}}}
+        }}
     });
     qspreadChart = new Chart(document.getElementById('qspread-chart'), {
         type:'line', data:{labels:[],datasets:[{data:[],borderColor:'#ffd600',backgroundColor:'rgba(255,214,0,.05)',borderWidth:2,pointRadius:0,tension:.4}]},
-        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{x:xScale(),y:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},grid:{color:'#1e2330'},title:{display:true,text:'Max − Min Q',color:'#6b7590',font:{size:9}},min:0}}}
+        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{
+            x:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9},maxTicksLimit:8},grid:{color:'#1e2330'}},
+            y:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},grid:{color:'#1e2330'},title:{display:true,text:'Max − Min Q',color:'#6b7590',font:{size:9}},min:0}
+        }}
     });
 }
 

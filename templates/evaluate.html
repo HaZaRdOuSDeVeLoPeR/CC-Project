@@ -50,7 +50,7 @@ function toggleHint(trigger) {
                     <input class="form-input" type="number" id="e_TEST_EPISODE_COUNT" value="300" min="1">
                 </div>
                 <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
-                <div class="param-hint-body">
+                <div class="param-hint-body" id="eh_TEST_EPISODE_COUNT">
                     <b>What:</b> How many episodes each method is evaluated over. More episodes give more stable statistics.<br>
                     <div class="hint-rule info">▸ Recommended: 100–500. Each method runs this many full episodes.</div>
                 </div>
@@ -62,7 +62,7 @@ function toggleHint(trigger) {
                     <input class="form-input" type="number" id="e_EPISODE_LENGTH" value="500" min="10">
                 </div>
                 <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
-                <div class="param-hint-body">
+                <div class="param-hint-body" id="eh_EPISODE_LENGTH">
                     <b>What:</b> Timesteps per episode. Each episode resets the environment with freshly randomised server speeds.<br>
                     <b>Note:</b> Should match the value used during training for a fair comparison.<br>
                     <div class="hint-rule info">▸ Range: 10+. Recommended: 200–1000.</div>
@@ -75,7 +75,7 @@ function toggleHint(trigger) {
                     <input class="form-input" type="number" id="e_AVG_INCOMING_REQUESTS" value="5" min="1">
                 </div>
                 <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
-                <div class="param-hint-body">
+                <div class="param-hint-body" id="eh_AVG_INCOMING_REQUESTS">
                     <b>What:</b> Poisson arrival rate λ. Each timestep, Poisson(λ) requests arrive and must be routed.<br>
                     <b>Total CPU demand per step</b> = λ × avg_workload.<br>
                     <div class="hint-rule info">▸ Range: 1+. Should match training for a fair eval.</div>
@@ -88,7 +88,7 @@ function toggleHint(trigger) {
                     <input class="form-input" type="number" id="e_AVG_REQUEST_WORKLOAD" value="10" min="1">
                 </div>
                 <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
-                <div class="param-hint-body">
+                <div class="param-hint-body" id="eh_AVG_REQUEST_WORKLOAD">
                     <b>What:</b> Average CPU units each request requires from the target server.<br>
                     <b>Rule:</b> Workload must be ≥ variance.<br>
                     <div class="hint-rule info">▸ Range: 1+. Recommended: 5–20.</div>
@@ -104,7 +104,7 @@ function toggleHint(trigger) {
                     <input class="form-input" type="number" id="e_REQUEST_WORKLOAD_VARIANCE" value="5" min="0">
                 </div>
                 <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
-                <div class="param-hint-body">
+                <div class="param-hint-body" id="eh_REQUEST_WORKLOAD_VARIANCE">
                     <b>What:</b> Workload drawn from Uniform(avg−var, avg+var) — controls request size variability.<br>
                     <b>Rule:</b> Must be ≤ avg_workload (otherwise negative workloads possible).<br>
                     <div class="hint-rule info">▸ Range: 0 – avg_workload. 0 = deterministic.</div>
@@ -117,7 +117,7 @@ function toggleHint(trigger) {
                     <input class="form-input" type="number" id="e_PROCESSING_POWER" value="10" min="1">
                 </div>
                 <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
-                <div class="param-hint-body">
+                <div class="param-hint-body" id="eh_PROCESSING_POWER">
                     <b>What:</b> Mean CPU units each server processes per step. Each server gets a <em>unique</em> speed drawn from Uniform(avg×0.3, avg×1.7) — this heterogeneity is exactly what DQN exploits over classical baselines.<br>
                     <div class="hint-rule info">▸ Recommended: set so N×power ≥ λ×workload (fleet can handle load).</div>
                 </div>
@@ -129,7 +129,7 @@ function toggleHint(trigger) {
                     <input class="form-input" type="number" id="e_MAX_QUEUE_LENGTH" value="200" min="1">
                 </div>
                 <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
-                <div class="param-hint-body">
+                <div class="param-hint-body" id="eh_MAX_QUEUE_LENGTH">
                     <b>What:</b> Hard cap on each server's queue depth. Requests that would exceed this are clipped.<br>
                     <b>Rule:</b> Should be at least 2× SLA threshold — otherwise SLA fires immediately under any load.<br>
                     <div class="hint-rule info">▸ Range: 10+. Recommended: 100–500.</div>
@@ -142,7 +142,7 @@ function toggleHint(trigger) {
                     <input class="form-input" type="number" id="e_SLA_VIOLATION_LATENCY" value="80" min="1">
                 </div>
                 <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
-                <div class="param-hint-body">
+                <div class="param-hint-body" id="eh_SLA_VIOLATION_LATENCY">
                     <b>What:</b> If average fleet queue depth exceeds this value at any step, an SLA violation is counted for that step.<br>
                     <b>Rule:</b> Must be &lt; max_queue_length (otherwise SLA can never trigger).<br>
                     <div class="hint-rule info">▸ Range: 1 – max_queue. Recommended: 40–100.</div>
@@ -156,6 +156,15 @@ function toggleHint(trigger) {
         🔒 <b>Server Count</b>: <span id="e_SERVER_COUNT_display" style="color:var(--accent);font-weight:600;">loading…</span>
         &nbsp;— locked by trained model (cannot change without retraining).
     </div>
+
+    <!-- Eval Parameter Health Panel -->
+    <div class="card" id="eval-health-panel" style="margin-bottom:1rem;">
+        <div class="card-label">Parameter Health Check
+            <span style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal;">— updates live as you change values</span>
+        </div>
+        <div id="eval-health-rows" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
         <button class="btn btn-primary" onclick="startEval()">Start Evaluation</button>
         <button class="btn btn-secondary" onclick="loadTrainConfig()">Reload Training Parameters</button>
@@ -302,7 +311,181 @@ async function loadTrainConfig() {
         var dispEl = document.getElementById('e_SERVER_COUNT_display');
         if (dispEl) dispEl.textContent = nSrv + ' servers';
     } catch(e) { console.warn('Could not load train config:', e); }
+    attachEvalParamListeners();
+    computeEvalGuidance();
 }
+
+// ── Eval parametric guidance ──────────────────────────────────────────────────
+function eiv(id) { var e = document.getElementById(id); return e ? (parseFloat(e.value) || 0) : 0; }
+
+function statusChipE(ok, text) {
+    var color=ok?'var(--green)':'var(--red)', bg=ok?'rgba(0,255,136,0.08)':'rgba(255,59,92,0.08)', border=ok?'rgba(0,255,136,0.25)':'rgba(255,59,92,0.25)';
+    return '<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:'+bg+';color:'+color+';border:1px solid '+border+';font-weight:600;">'+(ok?'✓':'✗')+' '+text+'</span>';
+}
+
+function setEHint(id, html) {
+    var el = document.getElementById('eh_' + id);
+    if (el) el.innerHTML = html;
+}
+
+function computeEvalGuidance() {
+    var lam      = eiv('e_AVG_INCOMING_REQUESTS');
+    var wl       = eiv('e_AVG_REQUEST_WORKLOAD');
+    var wlv      = eiv('e_REQUEST_WORKLOAD_VARIANCE');
+    var pp       = eiv('e_PROCESSING_POWER');
+    var sla      = eiv('e_SLA_VIOLATION_LATENCY');
+    var mq       = eiv('e_MAX_QUEUE_LENGTH');
+    var ep       = eiv('e_EPISODE_LENGTH');
+    var episodes = eiv('e_TEST_EPISODE_COUNT');
+    var nSrv     = eiv('e_SERVER_COUNT') || 10;
+
+    var arrival    = lam * wl;
+    var throughput = nSrv * pp;
+    var utilPct    = throughput > 0 ? (arrival / throughput * 100) : 999;
+    var slaRatio   = mq > 0 ? (sla / mq * 100) : 0;
+    var recLambda  = Math.max(1, Math.floor(throughput * 0.7 / Math.max(1, wl)));
+
+    setEHint('AVG_INCOMING_REQUESTS',
+        'Poisson(λ=' + lam + ') requests/step → avg <b>' + arrival.toFixed(0) + ' CPU/step</b>. ' +
+        'Fleet throughput = <b>' + throughput + ' CPU/step</b>. Load = <b>' + utilPct.toFixed(0) + '%</b>. ' +
+        statusChipE(utilPct < 90, utilPct < 90 ? (utilPct < 50 ? 'light load' : 'moderate load') : 'overloaded') +
+        '<br>Recommended λ for ~70% load: <b>' + recLambda + '</b>.'
+    );
+    setEHint('AVG_REQUEST_WORKLOAD',
+        'Each request adds <b>' + wl + ' CPU</b> to a server queue. ' +
+        'Max sustainable workload at λ=' + lam + ': <b>' + (throughput / Math.max(1, lam)).toFixed(1) + ' CPU/req</b>. ' +
+        statusChipE(arrival <= throughput, arrival <= throughput ? 'ok' : 'arrival exceeds throughput') +
+        '<br>Keep between 0.5×–2× PROCESSING_POWER = <b>' + (pp*0.5).toFixed(0) + '–' + (pp*2) + '</b>.'
+    );
+    setEHint('REQUEST_WORKLOAD_VARIANCE',
+        'Requests drawn from Uniform(' + Math.max(0,wl-wlv) + ', ' + (wl+wlv) + ') CPU. ' +
+        statusChipE(wlv < wl, wlv < wl ? 'ok' : 'variance ≥ workload — zero-cost requests possible') +
+        '<br>High variance makes the environment harder to predict. Keep ≤ 50% of workload = <b>' + (wl*0.5).toFixed(0) + '</b>.'
+    );
+    setEHint('PROCESSING_POWER',
+        'Each server drains <b>' + pp + ' CPU/step</b>. Fleet total = <b>' + throughput + ' CPU/step</b>. ' +
+        'Net queue change per step: ' + (arrival > throughput ? '+' : '') + (arrival - throughput).toFixed(0) + ' CPU. ' +
+        statusChipE(throughput >= arrival, throughput >= arrival ? 'queues stable' : 'queues growing — increase processing or reduce load')
+    );
+    setEHint('MAX_QUEUE_LENGTH',
+        'Hard cap per server queue. SLA threshold is ' + slaRatio.toFixed(0) + '% of queue cap. ' +
+        statusChipE(sla < mq * 0.8, sla < mq * 0.8 ? 'good headroom' : 'SLA too close to cap — increase MAX_QUEUE_LENGTH') +
+        '<br>Recommended ≥ 3× SLA threshold = <b>' + (sla * 3) + '</b>.'
+    );
+    setEHint('SLA_VIOLATION_LATENCY',
+        'SLA triggers when avg queue > <b>' + sla + '</b> (' + slaRatio.toFixed(0) + '% of queue cap ' + mq + '). ' +
+        'Recommended: 20–60% of MAX_QUEUE_LENGTH = <b>' + (mq*0.2).toFixed(0) + '–' + (mq*0.6).toFixed(0) + '</b>. ' +
+        statusChipE(sla > pp && sla < mq * 0.8, sla > pp && sla < mq * 0.8 ? 'ok' : 'adjust to ' + (mq*0.2).toFixed(0) + '–' + (mq*0.6).toFixed(0))
+    );
+    setEHint('TEST_EPISODE_COUNT',
+        '<b>' + episodes + ' episodes × ' + ep + ' steps = ' + (episodes*ep).toLocaleString() + ' total eval steps per method</b> (×4 methods = ' + (episodes*ep*4).toLocaleString() + ' total). ' +
+        'More episodes = tighter confidence intervals. ' +
+        statusChipE(episodes >= 50, episodes >= 50 ? 'ok — statistically reliable' : 'consider ≥ 50 for stable statistics')
+    );
+    setEHint('EPISODE_LENGTH',
+        '<b>' + ep + ' steps/episode</b>. At λ=' + lam + ', ~' + (lam*ep).toFixed(0) + ' requests arrive per episode. ' +
+        'Should match the training episode length for a fair DQN comparison. ' +
+        statusChipE(ep >= 200, ep >= 200 ? 'ok' : 'increase to ≥ 200 to observe queue dynamics')
+    );
+
+    computeEvalHealthPanel(lam, wl, wlv, pp, sla, mq, ep, episodes, nSrv);
+}
+
+function computeEvalHealthPanel(lam, wl, wlv, pp, sla, mq, ep, episodes, nSrv) {
+    var arrival    = lam * wl;
+    var peakArr    = lam * (wl + wlv);
+    var throughput = nSrv * pp;
+    var utilPct    = throughput > 0 ? (arrival / throughput * 100) : 999;
+    var peakPct    = throughput > 0 ? (peakArr / throughput * 100) : 999;
+    var slaRatio   = mq > 0 ? (sla / mq * 100) : 0;
+
+    var checks = [
+        {
+            label: 'Throughput vs load',
+            desc:  'λ × workload vs N × proc_power',
+            val:   arrival.toFixed(0) + ' CPU/step arriving vs ' + throughput + ' capacity (' + utilPct.toFixed(0) + '%)',
+            ok:    utilPct < 90,
+            tip:   utilPct >= 90 ? 'Reduce AVG_INCOMING_REQUESTS or increase PROCESSING_POWER' : null
+        },
+        {
+            label: 'Peak burst headroom',
+            desc:  'λ × (workload + variance) vs capacity',
+            val:   peakArr.toFixed(0) + ' CPU/step peak vs ' + throughput + ' (' + peakPct.toFixed(0) + '%)',
+            ok:    peakPct <= 120,
+            tip:   peakPct > 120 ? 'Reduce REQUEST_WORKLOAD_VARIANCE or increase PROCESSING_POWER' : null
+        },
+        {
+            label: 'SLA threshold placement',
+            desc:  'SLA should trigger before queue cap',
+            val:   'SLA=' + sla + ', queue cap=' + mq + ' (' + slaRatio.toFixed(0) + '%)',
+            ok:    sla < mq * 0.8 && sla > pp,
+            tip:   sla >= mq * 0.8 ? 'Increase MAX_QUEUE_LENGTH to ≥ ' + (sla*3) : (sla <= pp ? 'Raise SLA above PROCESSING_POWER (' + pp + ')' : null)
+        },
+        {
+            label: 'Variance < workload',
+            desc:  'Prevents zero-cost requests',
+            val:   'variance=' + wlv + ' vs workload=' + wl,
+            ok:    wlv < wl,
+            tip:   wlv >= wl ? 'Reduce REQUEST_WORKLOAD_VARIANCE to < ' + wl : null
+        },
+        {
+            label: 'Episode count',
+            desc:  'More episodes = more statistically reliable comparison',
+            val:   episodes + ' episodes per method',
+            ok:    episodes >= 50,
+            tip:   episodes < 50 ? 'Use ≥ 50 episodes for reliable statistics' : null
+        },
+        {
+            label: 'Episode length',
+            desc:  'Long enough to observe queue build-up and drain',
+            val:   ep + ' steps per episode (~' + (lam*ep).toFixed(0) + ' requests)',
+            ok:    ep >= 200,
+            tip:   ep < 200 ? 'Increase to ≥ 200 steps to see queue dynamics' : null
+        },
+    ];
+
+    var passCount = checks.filter(function(c){ return c.ok; }).length;
+    var panel = document.getElementById('eval-health-rows');
+    if (!panel) return;
+
+    var summaryColor = passCount === checks.length ? 'var(--green)' : passCount >= checks.length * 0.75 ? 'var(--yellow)' : 'var(--red)';
+    var summaryText  = passCount === checks.length
+        ? 'All checks pass — configuration looks good'
+        : passCount >= checks.length * 0.75
+        ? 'Minor issues — evaluation will run but results may be noisy'
+        : 'Multiple issues detected — review red items before evaluating';
+
+    var html = '<div style="font-size:11px;padding:8px 12px;border-radius:6px;background:rgba(0,0,0,0.15);color:'+summaryColor+';font-weight:500;margin-bottom:8px;">'
+        + passCount + '/' + checks.length + ' checks passed — ' + summaryText + '</div>';
+
+    html += checks.map(function(c) {
+        var color  = c.ok ? 'var(--green)' : 'var(--red)';
+        var bg     = c.ok ? 'rgba(0,255,136,0.04)' : 'rgba(255,59,92,0.04)';
+        var border = c.ok ? 'rgba(0,255,136,0.15)' : 'rgba(255,59,92,0.2)';
+        return '<div style="display:flex;align-items:flex-start;gap:12px;padding:8px 12px;border-radius:6px;background:'+bg+';border:1px solid '+border+';">'
+            + '<span style="color:'+color+';flex-shrink:0;font-size:12px;margin-top:1px;">'+(c.ok?'✓':'✗')+'</span>'
+            + '<div style="flex:1;min-width:0;">'
+            +   '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">'
+            +     '<span style="font-size:11px;font-weight:500;color:var(--text);">'+c.label+'</span>'
+            +     '<span style="font-size:10px;color:var(--text-muted);">'+c.desc+'</span>'
+            +   '</div>'
+            +   '<div style="font-size:11px;color:'+color+';font-family:JetBrains Mono,monospace;margin-top:2px;">'+c.val+'</div>'
+            +   (c.tip ? '<div style="font-size:10px;color:var(--yellow);margin-top:3px;">→ '+c.tip+'</div>' : '')
+            + '</div></div>';
+    }).join('');
+
+    panel.innerHTML = html;
+}
+
+function attachEvalParamListeners() {
+    ['e_AVG_INCOMING_REQUESTS','e_AVG_REQUEST_WORKLOAD','e_REQUEST_WORKLOAD_VARIANCE',
+     'e_PROCESSING_POWER','e_SLA_VIOLATION_LATENCY','e_MAX_QUEUE_LENGTH',
+     'e_TEST_EPISODE_COUNT','e_EPISODE_LENGTH'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) { el.addEventListener('input', computeEvalGuidance); el.addEventListener('change', computeEvalGuidance); }
+    });
+}
+// ── End eval guidance ─────────────────────────────────────────────────────────
 
 function collectEvalConfig() {
     function iv(id) { var e = document.getElementById(id); return e ? parseFloat(e.value) || 0 : 0; }
