@@ -1,185 +1,170 @@
-## 🚀 Agentic Load Balancer using Deep Reinforcement Learning
+# 🤖 Agentic Load Balancer using Deep Q-Network (DQN)
 
-An intelligent, reinforcement learning–based cloud load balancer that dynamically allocates workloads across servers and performs adaptive autoscaling to optimize latency, load balance, and SLA compliance.
-
-This project compares a Deep Q-Network (DQN) agent against traditional load balancing heuristics under stochastic cloud workloads.
+A reinforcement learning–based load balancer for cloud systems that dynamically routes incoming requests and adapts to varying workloads and heterogeneous server capacities.
 
 ---
 
 ## 📌 Overview
 
-Modern cloud systems face dynamic and unpredictable workloads. Traditional load balancing strategies (e.g., Round Robin, Least Connections) do not adapt optimally to fluctuating demand and SLA constraints.
+Traditional load balancing algorithms such as **Least Connections**, **Round Robin**, and **Random Routing** work well under simple conditions but struggle under:
 
-This project implements an Agentic Load Balancer using Deep Reinforcement Learning that:
+- High load scenarios
+- Heterogeneous server capacities
+- Dynamic traffic patterns
 
-- Learns optimal routing policies
-- Performs intelligent autoscaling
-- Minimizes latency and SLA violations
-- Maintains balanced CPU utilization
-- Adapts to stochastic request patterns
+This project introduces a **Deep Q-Network (DQN)** based agent that learns an optimal routing policy by interacting with a simulated cloud environment.
 
 ---
 
-## 🧠 Key Features
+## 🎯 Key Features
 
-- ✅ Deep Q-Network (DQN) based load balancing
-- ✅ Configurable autoscaling (enable/disable)
-- ✅ Poisson-distributed stochastic workload simulation
-- ✅ GPU optional (automatic CPU fallback)
-- ✅ Replay buffer with experience replay
-- ✅ Target network stabilization
-- ✅ Baseline comparisons:
-  - Random Allocation
-  - Round Robin
-  - Least Connections
-- ✅ Convergence analysis & reward visualization
-
----
-
-## 🏗️ Project Architecture
-```
-CC Project
-│
-├── cloud_env_simulator.py            # Cloud environment simulation
-├── configuration.py                  # All configurable hyperparameters
-├── dqn_agent.py                      # DQN model + replay buffer
-├── dqn_agent_trainer.py              # Training loop
-├── baselines_vs_dqn_evaluator.ipynb  # Evaluation & plotting
-├── requirements.txt
-├── .gitignore
-```
-
----
-
-## ⚙️ How It Works
-### Environment (cloud_env_simulator.py)
-
-Simulates:
-  - Server CPU utilization
-  - Request queues
-  - Poisson-distributed incoming workload
-  - Processing rates
-  - SLA violation penalties
-  - Autoscaling actions
-  - State Representation
-
-Includes:
-  - CPU utilization per server
-  - Queue length per server
-  - Average latency
-  - Number of active servers
-  - Load variance
-  - Action Space
-
-If autoscaling enabled:
-
-  - 0 → MAX_SERVER_COUNT - 1   : Route to server
-  - MAX_SERVER_COUNT           : Scale up
-  - MAX_SERVER_COUNT + 1       : Scale down
-
-Otherwise:
-
-  - 0 → MAX_SERVER_COUNT - 1   : Route to server
-
----
-
-## 🎯 Reward Function
-
-The agent minimizes:
-  - Average latency
+- 🧠 **DQN-based intelligent routing**
+- ⚖️ Comparison with classical baselines:
+  - Least Connections (LC)
+  - Round Robin (RR)
+  - Random Policy
+- 🏗️ **Heterogeneous server simulation**
+- 📈 Real-time **training & evaluation dashboard**
+- 🔄 Support for **variable traffic conditions (λ variation)**
+- ⚡ Optional **autoscaling support**
+- 📊 Visualization of:
+  - Reward trends
+  - Latency
   - SLA violations
-  - Load imbalance
-  - Excessive server usage
-  - Reward= − [Latency + SLA_Penalty + LoadVariance + ScalingCost]
-
-This encourages stable, balanced, low-latency operation.
+  - CPU utilization
+  - Action distribution
 
 ---
 
-## 🖥️ Installation
+## 🧠 Problem Formulation
 
-### 1️⃣ Clone Repository
-git clone https://github.com/HaZaRdOuSDeVeLoPeR/CC-Project.git  
+The system is modeled as a **Markov Decision Process (MDP)**:
+
+- **State**:
+  - Server queues
+  - CPU utilization
+  - Processing rates
+  - Latency
+  - Incoming request rate (λ)
+
+- **Action**:
+  - Select a server (or server pair) for routing
+
+- **Reward**:
+  Designed to balance:
+  - Throughput
+  - Latency
+  - Load balancing
+  - SLA violations
+
+---
+
+## ⚙️ System Architecture
+
+```
+cloud_env_simulator.py   → Environment (MDP)
+dqn_agent.py            → Neural Network (Q-function)
+dqn_agent_trainer.py    → Training Loop
+app.py                  → Web Interface (Flask)
+templates/              → UI (Jinja2 + Chart.js)
+```
+
+---
+
+## 📊 Experimental Insights
+
+### 🔹 Under Low Load (λ ≈ 5)
+- Classical methods perform competitively
+- System is underutilized
+- RL offers marginal improvement
+
+### 🔹 Under Moderate Load (λ ≈ 8–10)
+- DQN begins to outperform baselines
+- Better load distribution
+
+### 🔹 Under High Load (λ ≥ 10)
+- LC becomes unstable (high SLA violations)
+- DQN maintains:
+  - Lower latency
+  - Significantly fewer SLA violations
+  - Stable system behavior
+
+---
+
+## 🧪 Key Results
+
+- ✅ Up to **10–70× reduction in SLA violations**
+- ✅ Lower latency under high load
+- ✅ More stable system performance
+- ⚖️ Comparable performance under low load (expected behavior)
+
+---
+
+## 🚀 Getting Started
+
+### 1. Clone Repository
+
+```bash
+git clone https://github.com/HaZaRdOuSDeVeLoPeR/CC-Project.git
 cd CC-Project
+```
 
-### 2️⃣ Create Virtual Environment
-python -m venv venv
-venv\Scripts\activate
+---
 
-### 3️⃣ Install Dependencies
+### 2. Install Dependencies
+
+```bash
 pip install -r requirements.txt
-
-### 4️⃣ (Optional) Install CUDA-enabled PyTorch for GPU
-
-If you have an NVIDIA GPU:
-  - pip install torch --index-url https://download.pytorch.org/whl/cu121
+```
 
 ---
 
-### baselines_vs_dqn_evaluator.ipynb
-  - This notebook evaluates all baselines
-  - Compares performance
-  - Plots reward distributions
-  - Demonstrates convergence
+### 3. Run the Application
 
-## 🔧Configuration Options
+```bash
+python app.py
+```
 
-All configurable parameters are centralized in: configuration.py  
-Including:
-  - Server counts
-  - Processing rate
-  - SLA thresholds
-  - Incoming workload parameters
-  - DQN hyperparameters
-  - Training episode count
-  - Device selection
+Open in browser:
 
-This makes experimentation and ablation studies easy.
+http://localhost:5000
 
 ---
 
-## 🧪 Research Observations
+## 📈 Evaluation Metrics
 
-  - DQN converges to a steady-state control strategy.
-  - Evaluation with ε = 0 yields deterministic performance.
-  - Autoscaling significantly improves stability under stochastic load.
-  - Learned policy absorbs workload randomness better than heuristics.
-  - Replay buffer and target network stabilize training.
-
----
-
-## 📌 Future Improvements
-
-  - Double DQN implementation
-  - Prioritized Experience Replay
-  - Parallelized environments
-  - Multi-agent distributed control
-  - Carbon-aware scheduling integration
-  - Serverless simulation extension
+- Average Reward
+- Latency
+- SLA Violations
+- CPU Utilization
+- Action Distribution
 
 ---
 
-## 📚 Technologies Used
+## ⚠️ Design Notes
 
-  - Python 3.10
-  - PyTorch
-  - NumPy
-  - Matplotlib
-  - Reinforcement Learning (DQN)
+- Reward is used **only for training**, not final evaluation
+- Evaluation is based on **system-level metrics**
+- Training noise is expected due to stochastic environment
+
+---
+
+## 🧩 Future Work
+
+- Continuous action space (PPO / Actor-Critic)
+- Multi-objective optimization
+- Real-world traffic traces
+- Advanced autoscaling policies
 
 ---
 
 ## 👨‍💻 Author
 
 Aditya Vimal  
-B.Tech CSE  
-NIT Warangal
+B.Tech CSE, NIT Warangal  
 
-Parth Yogesh Dhat  
-B.Tech CSE  
-NIT Warangal
+---
 
-Sameer Lucky  
-B.Tech CSE  
-NIT Warangal
+## ⭐ If you found this useful
 
+Give it a ⭐ on GitHub!
