@@ -6,7 +6,8 @@ PROCESSING_POWER_VARIANCE = 0.5  # server speed drawn from uniform(avg*(1-var), 
 MAX_QUEUE_LENGTH        = 300   # max queue depth per server
 
 # ── Workload ──────────────────────────────────────────────────────────────────
-AVG_INCOMING_REQUESTS   = 10     # Poisson λ — avg requests per step
+AVG_INCOMING_REQUESTS   = 7     # Poisson λ — avg requests per step
+AVG_INCOMING_REQUESTS_VARIANCE = 5  # λ varies ± this each episode (0 = fixed λ)
 AVG_REQUEST_WORKLOAD    = 10    # avg CPU units per request
 REQUEST_WORKLOAD_VARIANCE = 5   # workload ± variance
 
@@ -21,12 +22,12 @@ TEST_EPISODE_COUNT      = 300   # evaluation episodes
 # ── DQN hyperparameters ───────────────────────────────────────────────────────
 GAMMA                   = 0.99
 LEARNING_RATE           = 0.00025
-BATCH_SIZE              = 128
+BATCH_SIZE              = 256
 REPLAY_BUFFER_SIZE      = 100000
 EPSILON_START           = 1.0
 EPSILON_MIN             = 0.05
 TARGET_UPDATE_STEPS     = 500
-HIDDEN_DIM              = 128
+HIDDEN_DIM              = 256
 DEVICE                  = "cpu"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────

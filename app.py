@@ -22,6 +22,7 @@ eval_state = {
 DEFAULT_CFG = {
     "SERVER_COUNT": SERVER_COUNT,
     "AVG_INCOMING_REQUESTS": AVG_INCOMING_REQUESTS,
+    "AVG_INCOMING_REQUESTS_VARIANCE": AVG_INCOMING_REQUESTS_VARIANCE,
     "AVG_REQUEST_WORKLOAD": AVG_REQUEST_WORKLOAD,
     "REQUEST_WORKLOAD_VARIANCE": REQUEST_WORKLOAD_VARIANCE,
     "MAX_SERVER_UTILIZATION": MAX_SERVER_UTILIZATION,
@@ -79,6 +80,7 @@ def run_training(cfg):
         target_upd  = int(cfg.get("TARGET_UPDATE_STEPS", 500))
         hidden_dim  = int(cfg.get("HIDDEN_DIM", 128))
         avg_req     = int(cfg.get("AVG_INCOMING_REQUESTS", 5))
+        req_var     = int(cfg.get("AVG_INCOMING_REQUESTS_VARIANCE", 0))
         avg_wl      = int(cfg.get("AVG_REQUEST_WORKLOAD", 10))
         wl_var      = int(cfg.get("REQUEST_WORKLOAD_VARIANCE", 5))
         max_util    = int(cfg.get("MAX_SERVER_UTILIZATION", 100)) or 100
@@ -88,17 +90,19 @@ def run_training(cfg):
 
         # Patch module-level constants so CloudEnvironment reads them correctly
         import cloud_env_simulator as _cem
-        _cem.AVG_INCOMING_REQUESTS    = avg_req
-        _cem.AVG_REQUEST_WORKLOAD     = avg_wl
-        _cem.REQUEST_WORKLOAD_VARIANCE = wl_var
-        _cem.MAX_QUEUE_LENGTH         = max_queue
-        _cem.SLA_VIOLATION_LATENCY    = sla_thresh
-        _cem.EPISODE_LENGTH           = max_steps
+        _cem.AVG_INCOMING_REQUESTS             = avg_req
+        _cem.AVG_INCOMING_REQUESTS_VARIANCE    = req_var
+        _cem.AVG_REQUEST_WORKLOAD              = avg_wl
+        _cem.REQUEST_WORKLOAD_VARIANCE         = wl_var
+        _cem.MAX_QUEUE_LENGTH                  = max_queue
+        _cem.SLA_VIOLATION_LATENCY             = sla_thresh
+        _cem.EPISODE_LENGTH                    = max_steps
 
         from cloud_env_simulator import CloudEnvironment
         from dqn_agent import DQNAgent
 
-        env = CloudEnvironment(num_servers=n_servers, avg_proc_rate=proc_power)
+        env = CloudEnvironment(num_servers=n_servers, avg_proc_rate=proc_power,
+                               avg_lambda=avg_req, lambda_variance=req_var)
         env.server_capacity = max_util
 
         state_size  = len(env.reset())
@@ -193,6 +197,7 @@ def run_evaluation(cfg):
         max_steps  = int(cfg.get("EPISODE_LENGTH", 500))
         n_servers  = int(cfg.get("SERVER_COUNT", 10))
         avg_req    = int(cfg.get("AVG_INCOMING_REQUESTS", 5))
+        req_var    = int(cfg.get("AVG_INCOMING_REQUESTS_VARIANCE", 0))
         avg_wl     = int(cfg.get("AVG_REQUEST_WORKLOAD", 10))
         wl_var     = int(cfg.get("REQUEST_WORKLOAD_VARIANCE", 5))
         max_util   = int(cfg.get("MAX_SERVER_UTILIZATION", 100)) or 100   # never 0
@@ -212,12 +217,13 @@ def run_evaluation(cfg):
 
         # Patch env constants
         import cloud_env_simulator as _cem
-        _cem.AVG_INCOMING_REQUESTS    = avg_req
-        _cem.AVG_REQUEST_WORKLOAD     = avg_wl
-        _cem.REQUEST_WORKLOAD_VARIANCE = wl_var
-        _cem.MAX_QUEUE_LENGTH         = max_queue
-        _cem.SLA_VIOLATION_LATENCY    = sla_thresh
-        _cem.EPISODE_LENGTH           = max_steps
+        _cem.AVG_INCOMING_REQUESTS             = avg_req
+        _cem.AVG_INCOMING_REQUESTS_VARIANCE    = req_var
+        _cem.AVG_REQUEST_WORKLOAD              = avg_wl
+        _cem.REQUEST_WORKLOAD_VARIANCE         = wl_var
+        _cem.MAX_QUEUE_LENGTH                  = max_queue
+        _cem.SLA_VIOLATION_LATENCY             = sla_thresh
+        _cem.EPISODE_LENGTH                    = max_steps
 
         from cloud_env_simulator import CloudEnvironment
         from dqn_agent import DQN
@@ -228,8 +234,8 @@ def run_evaluation(cfg):
                 f"SERVER_COUNT mismatch: eval uses {n_servers} servers but model "
                 f"was trained with {num_servers_from_model}. Retrain or match the config."
             )
-        # Validate state size matches new formula: N*3+2
-        expected_state_size = n_servers * 3 + 2
+        # Validate state size matches formula: N*3+3
+        expected_state_size = n_servers * 3 + 3
         if state_size != expected_state_size:
             raise RuntimeError(
                 f"State size mismatch: model has {state_size} inputs but env produces "
@@ -256,7 +262,8 @@ def run_evaluation(cfg):
                 if not eval_state["running"]:
                     break
 
-                env = CloudEnvironment(num_servers=n_servers, avg_proc_rate=proc_power)
+                env = CloudEnvironment(num_servers=n_servers, avg_proc_rate=proc_power,
+                                      avg_lambda=avg_req, lambda_variance=req_var)
                 env.server_capacity = max_util
 
                 state         = env.reset()
@@ -464,7 +471,7 @@ def model_meta():
         state_size  = int(w["network.0.weight"].shape[1])
         action_size = int(w["network.4.weight"].shape[0])
         num_servers = action_size  # action_size == num_servers (one action per server)
-        # state_size = num_servers * 3 + 2  (cpu, queues, proc_rates, avg_lat, mean_cpu)
+        # state_size = num_servers * 3 + 3  (cpu, queues, proc_rates, avg_lat, mean_cpu, norm_lambda)
         return jsonify({
             "has_meta":    True,
             "state_size":  state_size,

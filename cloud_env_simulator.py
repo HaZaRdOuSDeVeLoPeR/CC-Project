@@ -3,7 +3,8 @@ import random
 from configuration import (
     SERVER_COUNT, SLA_VIOLATION_LATENCY, EPISODE_LENGTH,
     MAX_SERVER_UTILIZATION, PROCESSING_POWER, AVG_INCOMING_REQUESTS,
-    AVG_REQUEST_WORKLOAD, REQUEST_WORKLOAD_VARIANCE, MAX_QUEUE_LENGTH
+    AVG_INCOMING_REQUESTS_VARIANCE, AVG_REQUEST_WORKLOAD,
+    REQUEST_WORKLOAD_VARIANCE, MAX_QUEUE_LENGTH
 )
 
 class CloudEnvironment:
@@ -24,12 +25,20 @@ class CloudEnvironment:
     Action space: SERVER_COUNT actions — one per server.
       action i  →  route all incoming requests this step to server i
 
-    State (size = SERVER_COUNT * 3 + 2):
+    Lambda variance (AVG_INCOMING_REQUESTS_VARIANCE):
+      If > 0, λ is re-sampled uniformly from [avg−var, avg+var] at the START of
+      each episode (not per step). This forces the agent to generalise across
+      both light and heavy traffic regimes rather than overfitting to a fixed load.
+
+    State (size = SERVER_COUNT * 3 + 3):
       cpu_usage[0..N-1]          fraction of processing capacity used this step (0=idle, 1=saturated)
       queues[0..N-1]             normalised queue length (queue / MAX_QUEUE_LENGTH)
       proc_rates[0..N-1]         normalised server speed (speed / max_speed)
       avg_latency                fleet average queue (normalised)
       mean_cpu                   fleet average cpu utilisation
+      norm_lambda                current episode's λ normalised by avg_lambda (1.0 = average traffic)
+                                 Only meaningful when AVG_INCOMING_REQUESTS_VARIANCE > 0, but
+                                 always included so state size is constant across configs.
 
     Note: proc_rates are included in the state so the agent can learn
     to route to fast servers. Classical baselines don't use this info.
@@ -40,10 +49,16 @@ class CloudEnvironment:
       -5 * sla_violation      hard SLA breach penalty
     """
 
-    def __init__(self, num_servers=SERVER_COUNT, avg_proc_rate=PROCESSING_POWER):
-        self.num_servers  = num_servers
+    def __init__(self, num_servers=SERVER_COUNT, avg_proc_rate=PROCESSING_POWER,
+                 avg_lambda=None, lambda_variance=None):
+        self.num_servers   = num_servers
         self.avg_proc_rate = avg_proc_rate
         self.server_capacity = MAX_SERVER_UTILIZATION
+
+        # Lambda (request arrival rate) — re-sampled each episode in reset()
+        # Falls back to module-level constants if not provided explicitly
+        self.avg_lambda      = avg_lambda if avg_lambda is not None else AVG_INCOMING_REQUESTS
+        self.lambda_variance = lambda_variance if lambda_variance is not None else AVG_INCOMING_REQUESTS_VARIANCE
 
         # Assign heterogeneous processing powers.
         # Draw from a uniform distribution and rescale so mean = avg_proc_rate.
@@ -62,6 +77,13 @@ class CloudEnvironment:
         self.time           = 0
         self.total_latency  = 0
         self.total_requests = 0
+        # Re-sample λ each episode so the agent learns to handle variable traffic
+        if self.lambda_variance > 0:
+            lo = max(1, self.avg_lambda - self.lambda_variance)
+            hi = max(lo + 1, self.avg_lambda + self.lambda_variance)
+            self.current_lambda = float(random.randint(int(lo), int(hi)))
+        else:
+            self.current_lambda = float(self.avg_lambda)
         return self._get_state()
 
     def step(self, action):
@@ -69,7 +91,7 @@ class CloudEnvironment:
         # Capture queue depth BEFORE routing — immediate reward signal
         queue_before_routing = float(self.queues[action])
 
-        incoming = np.random.poisson(lam=AVG_INCOMING_REQUESTS)
+        incoming = np.random.poisson(lam=self.current_lambda)
         for _ in range(incoming):
             workload = random.randint(
                 AVG_REQUEST_WORKLOAD - REQUEST_WORKLOAD_VARIANCE,
@@ -123,9 +145,13 @@ class CloudEnvironment:
         state = []
         state.extend(self.cpu_usage.tolist())
         state.extend((self.queues / float(MAX_QUEUE_LENGTH)).tolist())
-        # Normalised processing rates — this is what classical baselines LACK.
+        # Normalised processing rates — what classical baselines LACK.
         # DQN uses this to learn "fast server, short queue = best choice".
         state.extend((self.proc_rates / self.max_proc_rate).tolist())
         state.append(float(np.mean(self.queues)) / float(MAX_QUEUE_LENGTH))
         state.append(float(np.mean(self.cpu_usage)))
+        # Normalised current λ — tells the agent whether this is a light or heavy traffic episode.
+        # Normalised to avg_lambda so 1.0 = average load, <1 = light, >1 = heavy.
+        # When variance=0 this is always 1.0, which still gives the network a constant
+        state.append(self.current_lambda / max(1.0, float(self.avg_lambda)))
         return np.array(state, dtype=np.float32)

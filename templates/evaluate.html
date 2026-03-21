@@ -83,6 +83,19 @@ function toggleHint(trigger) {
             </div>
 
             <div class="param-group">
+                <div class="param-label">Traffic Variance (λ ±)</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="e_AVG_INCOMING_REQUESTS_VARIANCE" value="0" min="0">
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
+                <div class="param-hint-body" id="eh_AVG_INCOMING_REQUESTS_VARIANCE">
+                    <b>What:</b> Each episode, λ is re-sampled from [λ − var, λ + var]. Should match the value used during training.<br>
+                    <b>Rule:</b> Must be ≤ λ to prevent zero-request episodes. Set to 0 for fixed traffic.<br>
+                    <div class="hint-rule info">▸ Set to 0 if the model was trained without traffic variance.</div>
+                </div>
+            </div>
+
+            <div class="param-group">
                 <div class="param-label">Avg Request Workload</div>
                 <div class="param-input-row">
                     <input class="form-input" type="number" id="e_AVG_REQUEST_WORKLOAD" value="10" min="1">
@@ -207,7 +220,7 @@ function toggleHint(trigger) {
     <!-- Summary table -->
     <div class="card" style="margin-bottom:1.5rem;overflow-x:auto;">
         <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">
-            Sorted by composite score: <code style="font-size:9px;color:var(--text-dim);">reward − 0.1×std − 10×latency − 0.01×sla_violations − 5×avg_cpu</code>
+            Sorted by operational composite score (reward excluded — metrics normalised 0–1 across methods): <code style="font-size:9px;color:var(--text-dim);">40% latency + 40% sla_violations + 10% stability + 10% cpu_efficiency</code>
         </div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead>
@@ -288,14 +301,15 @@ async function loadTrainConfig() {
         var cfg = await r.json();
         // Populate all editable fields from training config
         var map = {
-            'TEST_EPISODE_COUNT':      'e_TEST_EPISODE_COUNT',
-            'EPISODE_LENGTH':          'e_EPISODE_LENGTH',
-            'AVG_INCOMING_REQUESTS':   'e_AVG_INCOMING_REQUESTS',
-            'AVG_REQUEST_WORKLOAD':    'e_AVG_REQUEST_WORKLOAD',
-            'REQUEST_WORKLOAD_VARIANCE':'e_REQUEST_WORKLOAD_VARIANCE',
-            'PROCESSING_POWER':        'e_PROCESSING_POWER',
-            'MAX_QUEUE_LENGTH':        'e_MAX_QUEUE_LENGTH',
-            'SLA_VIOLATION_LATENCY':   'e_SLA_VIOLATION_LATENCY',
+            'TEST_EPISODE_COUNT':               'e_TEST_EPISODE_COUNT',
+            'EPISODE_LENGTH':                   'e_EPISODE_LENGTH',
+            'AVG_INCOMING_REQUESTS':            'e_AVG_INCOMING_REQUESTS',
+            'AVG_INCOMING_REQUESTS_VARIANCE':   'e_AVG_INCOMING_REQUESTS_VARIANCE',
+            'AVG_REQUEST_WORKLOAD':             'e_AVG_REQUEST_WORKLOAD',
+            'REQUEST_WORKLOAD_VARIANCE':        'e_REQUEST_WORKLOAD_VARIANCE',
+            'PROCESSING_POWER':                 'e_PROCESSING_POWER',
+            'MAX_QUEUE_LENGTH':                 'e_MAX_QUEUE_LENGTH',
+            'SLA_VIOLATION_LATENCY':            'e_SLA_VIOLATION_LATENCY',
         };
         for (var k in map) {
             var el = document.getElementById(map[k]);
@@ -330,6 +344,7 @@ function setEHint(id, html) {
 
 function computeEvalGuidance() {
     var lam      = eiv('e_AVG_INCOMING_REQUESTS');
+    var lamv     = eiv('e_AVG_INCOMING_REQUESTS_VARIANCE');
     var wl       = eiv('e_AVG_REQUEST_WORKLOAD');
     var wlv      = eiv('e_REQUEST_WORKLOAD_VARIANCE');
     var pp       = eiv('e_PROCESSING_POWER');
@@ -339,17 +354,27 @@ function computeEvalGuidance() {
     var episodes = eiv('e_TEST_EPISODE_COUNT');
     var nSrv     = eiv('e_SERVER_COUNT') || 10;
 
-    var arrival    = lam * wl;
+    var lamPeak  = lam + lamv;
+    var arrival  = lam * wl;
     var throughput = nSrv * pp;
     var utilPct    = throughput > 0 ? (arrival / throughput * 100) : 999;
     var slaRatio   = mq > 0 ? (sla / mq * 100) : 0;
     var recLambda  = Math.max(1, Math.floor(throughput * 0.7 / Math.max(1, wl)));
+    var lambdaStr  = lamv > 0 ? 'λ ∈ [' + Math.max(1, lam-lamv) + ', ' + (lam+lamv) + ']' : 'λ = ' + lam + ' (fixed)';
 
     setEHint('AVG_INCOMING_REQUESTS',
         'Poisson(λ=' + lam + ') requests/step → avg <b>' + arrival.toFixed(0) + ' CPU/step</b>. ' +
         'Fleet throughput = <b>' + throughput + ' CPU/step</b>. Load = <b>' + utilPct.toFixed(0) + '%</b>. ' +
         statusChipE(utilPct < 90, utilPct < 90 ? (utilPct < 50 ? 'light load' : 'moderate load') : 'overloaded') +
         '<br>Recommended λ for ~70% load: <b>' + recLambda + '</b>.'
+    );
+    setEHint('AVG_INCOMING_REQUESTS_VARIANCE',
+        lamv > 0
+            ? '<b>Traffic variance active:</b> each episode λ ~ Uniform(' + Math.max(1,lam-lamv) + ', ' + (lam+lamv) + '). ' +
+              'Must match the value used during training for a fair comparison. ' +
+              statusChipE(lamv <= lam, lamv <= lam ? 'ok — λ range valid' : 'variance > λ — possible zero-request episodes')
+            : '<b>Fixed traffic:</b> λ = ' + lam + ' every episode. ' +
+              'If the model was trained with AVG_INCOMING_REQUESTS_VARIANCE > 0, set it here too for a fair eval.'
     );
     setEHint('AVG_REQUEST_WORKLOAD',
         'Each request adds <b>' + wl + ' CPU</b> to a server queue. ' +
@@ -388,12 +413,13 @@ function computeEvalGuidance() {
         statusChipE(ep >= 200, ep >= 200 ? 'ok' : 'increase to ≥ 200 to observe queue dynamics')
     );
 
-    computeEvalHealthPanel(lam, wl, wlv, pp, sla, mq, ep, episodes, nSrv);
+    computeEvalHealthPanel(lam, lamv, wl, wlv, pp, sla, mq, ep, episodes, nSrv);
 }
 
-function computeEvalHealthPanel(lam, wl, wlv, pp, sla, mq, ep, episodes, nSrv) {
+function computeEvalHealthPanel(lam, lamv, wl, wlv, pp, sla, mq, ep, episodes, nSrv) {
+    var lamPeak    = lam + lamv;
     var arrival    = lam * wl;
-    var peakArr    = lam * (wl + wlv);
+    var peakArr    = lamPeak * (wl + wlv);
     var throughput = nSrv * pp;
     var utilPct    = throughput > 0 ? (arrival / throughput * 100) : 999;
     var peakPct    = throughput > 0 ? (peakArr / throughput * 100) : 999;
@@ -401,18 +427,25 @@ function computeEvalHealthPanel(lam, wl, wlv, pp, sla, mq, ep, episodes, nSrv) {
 
     var checks = [
         {
-            label: 'Throughput vs load',
-            desc:  'λ × workload vs N × proc_power',
-            val:   arrival.toFixed(0) + ' CPU/step arriving vs ' + throughput + ' capacity (' + utilPct.toFixed(0) + '%)',
+            label: 'Throughput vs load (avg)',
+            desc:  'avg λ × workload vs N × proc_power',
+            val:   arrival.toFixed(0) + ' CPU/step avg vs ' + throughput + ' capacity (' + utilPct.toFixed(0) + '%)',
             ok:    utilPct < 90,
             tip:   utilPct >= 90 ? 'Reduce AVG_INCOMING_REQUESTS or increase PROCESSING_POWER' : null
         },
         {
             label: 'Peak burst headroom',
-            desc:  'λ × (workload + variance) vs capacity',
+            desc:  '(λ+λ_var) × (workload+wl_var) vs capacity',
             val:   peakArr.toFixed(0) + ' CPU/step peak vs ' + throughput + ' (' + peakPct.toFixed(0) + '%)',
             ok:    peakPct <= 120,
-            tip:   peakPct > 120 ? 'Reduce REQUEST_WORKLOAD_VARIANCE or increase PROCESSING_POWER' : null
+            tip:   peakPct > 120 ? 'Reduce REQUEST_WORKLOAD_VARIANCE / AVG_INCOMING_REQUESTS_VARIANCE or increase PROCESSING_POWER' : null
+        },
+        {
+            label: 'Traffic variance range',
+            desc:  'λ per episode drawn from [λ−var, λ+var]',
+            val:   lamv > 0 ? 'λ ∈ [' + Math.max(1, lam-lamv) + ', ' + (lam+lamv) + ']' : 'fixed λ = ' + lam,
+            ok:    lamv >= 0 && lamv <= lam,
+            tip:   lamv > lam ? 'Reduce AVG_INCOMING_REQUESTS_VARIANCE to ≤ λ (' + lam + ')' : null
         },
         {
             label: 'SLA threshold placement',
@@ -478,7 +511,8 @@ function computeEvalHealthPanel(lam, wl, wlv, pp, sla, mq, ep, episodes, nSrv) {
 }
 
 function attachEvalParamListeners() {
-    ['e_AVG_INCOMING_REQUESTS','e_AVG_REQUEST_WORKLOAD','e_REQUEST_WORKLOAD_VARIANCE',
+    ['e_AVG_INCOMING_REQUESTS','e_AVG_INCOMING_REQUESTS_VARIANCE',
+     'e_AVG_REQUEST_WORKLOAD','e_REQUEST_WORKLOAD_VARIANCE',
      'e_PROCESSING_POWER','e_SLA_VIOLATION_LATENCY','e_MAX_QUEUE_LENGTH',
      'e_TEST_EPISODE_COUNT','e_EPISODE_LENGTH'].forEach(function(id) {
         var el = document.getElementById(id);
@@ -490,16 +524,17 @@ function attachEvalParamListeners() {
 function collectEvalConfig() {
     function iv(id) { var e = document.getElementById(id); return e ? parseFloat(e.value) || 0 : 0; }
     return {
-        SERVER_COUNT:            iv('e_SERVER_COUNT') || 10,
-        TEST_EPISODE_COUNT:      iv('e_TEST_EPISODE_COUNT') || 300,
-        EPISODE_LENGTH:          iv('e_EPISODE_LENGTH') || 500,
-        AVG_INCOMING_REQUESTS:   iv('e_AVG_INCOMING_REQUESTS') || 5,
-        AVG_REQUEST_WORKLOAD:    iv('e_AVG_REQUEST_WORKLOAD') || 10,
-        REQUEST_WORKLOAD_VARIANCE: iv('e_REQUEST_WORKLOAD_VARIANCE') || 5,
-        PROCESSING_POWER:        iv('e_PROCESSING_POWER') || 10,
-        MAX_QUEUE_LENGTH:        iv('e_MAX_QUEUE_LENGTH') || 200,
-        SLA_VIOLATION_LATENCY:   iv('e_SLA_VIOLATION_LATENCY') || 80,
-        MAX_SERVER_UTILIZATION:  100,   // fixed — not user-configurable
+        SERVER_COUNT:                        iv('e_SERVER_COUNT') || 10,
+        TEST_EPISODE_COUNT:                  iv('e_TEST_EPISODE_COUNT') || 300,
+        EPISODE_LENGTH:                      iv('e_EPISODE_LENGTH') || 500,
+        AVG_INCOMING_REQUESTS:               iv('e_AVG_INCOMING_REQUESTS') || 5,
+        AVG_INCOMING_REQUESTS_VARIANCE:      iv('e_AVG_INCOMING_REQUESTS_VARIANCE'),
+        AVG_REQUEST_WORKLOAD:                iv('e_AVG_REQUEST_WORKLOAD') || 10,
+        REQUEST_WORKLOAD_VARIANCE:           iv('e_REQUEST_WORKLOAD_VARIANCE') || 5,
+        PROCESSING_POWER:                    iv('e_PROCESSING_POWER') || 10,
+        MAX_QUEUE_LENGTH:                    iv('e_MAX_QUEUE_LENGTH') || 200,
+        SLA_VIOLATION_LATENCY:               iv('e_SLA_VIOLATION_LATENCY') || 80,
+        MAX_SERVER_UTILIZATION:              100,   // fixed — not user-configurable
     };
 }
 
@@ -589,19 +624,30 @@ function updateEvalUI(data) {
     }
 }
 
-function compositeScore(r) {
-    // Higher is better. Normalise each metric to a contribution:
-    //   + mean_reward (already higher=better)
-    //   - std_reward  (lower variance is better — penalise instability)
-    //   - avg_latency (lower is better)
-    //   - sla_violations (lower is better — heaviest weight as it is a hard SLA)
-    //   - avg_cpu     (lower is better for efficiency)
-    if (!r) return -Infinity;
-    return r.mean_reward
-           - 0.1  * r.std_reward
-           - 10   * r.avg_latency
-           - 0.01 * r.sla_violations
-           - 5    * r.avg_cpu;
+function compositeScore(r, allResults) {
+    // Operational-metrics-only ranking — reward is shown in the table but excluded
+    // from the sort because its scale varies wildly with load level and reward shaping,
+    // making cross-condition comparisons misleading.
+    // All metrics normalised 0-1 across the four methods before weighting.
+    if (!r || !allResults) return -Infinity;
+    var methods = Object.keys(allResults).filter(function(m){ return allResults[m]; });
+
+    function normLower(key) {
+        // lowest value across methods → score 1.0  (lower is better)
+        var vals = methods.map(function(m){ return allResults[m][key] || 0; });
+        var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+        return mx === mn ? 1 : 1 - ((r[key] || 0) - mn) / (mx - mn);
+    }
+
+    // Weights (sum to 1):
+    //   40% latency        — primary quality-of-service signal
+    //   40% SLA violations — hard service-level agreement breaches
+    //   10% std_reward     — stability / consistency across episodes
+    //   10% avg_cpu        — resource efficiency (lower = less wasted capacity)
+    return 0.40 * normLower('avg_latency')
+         + 0.40 * normLower('sla_violations')
+         + 0.10 * normLower('std_reward')
+         + 0.10 * normLower('avg_cpu');
 }
 
 function renderSummary(results, evalData) {
@@ -610,14 +656,19 @@ function renderSummary(results, evalData) {
     var methodColors = {dqn:'var(--accent)', random:'var(--accent3)', round_robin:'var(--accent2)', least_connections:'var(--green)'};
     var methodNames  = {dqn:'DQN Agent', random:'Random', round_robin:'Round Robin', least_connections:'Least Conn.'};
 
-    // Sort methods by composite score (best first)
+    // Sort methods by normalised composite score (best first)
     var sorted = methods.slice().sort(function(a, b) {
-        return compositeScore(results[b]) - compositeScore(results[a]);
+        return compositeScore(results[b], results) - compositeScore(results[a], results);
     });
     var best = sorted[0];
+    var bestScore = (compositeScore(results[best], results) * 100).toFixed(1);
 
     document.getElementById('winner-banner').innerHTML =
-        '🏆 Best performing strategy: <b style="color:' + methodColors[best] + '">' + methodNames[best] + '</b> — Mean Reward: <b>' + (results[best]||{}).mean_reward + '</b>';
+        '🏆 Best overall: <b style="color:' + methodColors[best] + '">' + methodNames[best] + '</b>'
+        + ' — operational score <b>' + bestScore + '/100</b>'
+        + ' <span style="font-size:10px;font-weight:400;color:var(--text-dim);">'
+        + '(40% latency + 40% SLA violations + 10% stability + 10% CPU — reward excluded, all normalised across methods)'
+        + '</span>';
 
     // Table — render rows in sorted order
     var tbody = document.getElementById('results-tbody');
@@ -625,18 +676,23 @@ function renderSummary(results, evalData) {
     sorted.forEach(function(m, rank) {
         var r   = results[m];
         if (!r) return;
+        var score = (compositeScore(r, results) * 100).toFixed(1);
         var row = document.createElement('tr');
         row.style.borderBottom = '1px solid var(--border)';
         var isBest = m === best;
         var rankLabel = ['🥇','🥈','🥉','4th'][rank] || (rank+1)+'th';
         row.innerHTML =
-            '<td style="padding:12px;"><span style="color:' + methodColors[m] + ';font-weight:600;">' + methodNames[m] + (isBest ? ' <span class="badge badge-done" style="font-size:9px;margin-left:4px;">BEST</span>' : '') + '</span>' +
-            '<span style="margin-left:6px;font-size:10px;color:var(--text-muted);">' + rankLabel + '</span></td>' +
-            '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;' + (isBest?'color:var(--green);font-weight:700;':'color:var(--red);') + '">' + r.mean_reward + '</td>' +
-            '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;color:var(--text-dim);">±' + r.std_reward + '</td>' +
-            '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;font-weight:700;">' + r.avg_latency + '</td>' +
-            '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;' + (r.sla_violations > 0 ? 'color:var(--red);font-weight:700;' : 'color:var(--green);') + '">' + r.sla_violations + '</td>' +
-            '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;">' + r.avg_cpu + '%</td>';
+            '<td style="padding:12px;">'
+            + '<span style="color:' + methodColors[m] + ';font-weight:600;">' + methodNames[m]
+            + (isBest ? ' <span class="badge badge-done" style="font-size:9px;margin-left:4px;">BEST</span>' : '') + '</span>'
+            + ' <span style="margin-left:4px;font-size:10px;color:var(--text-muted);">' + rankLabel + '</span>'
+            + '<br><span style="font-size:10px;color:var(--text-muted);font-family:JetBrains Mono;">score: ' + score + '/100</span>'
+            + '</td>'
+            + '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;' + (r.mean_reward >= 0 ? 'color:var(--green);' : 'color:var(--red);') + (isBest?'font-weight:700;':'') + '">' + r.mean_reward + '</td>'
+            + '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;color:var(--text-dim);">±' + r.std_reward + '</td>'
+            + '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;font-weight:700;">' + r.avg_latency + '</td>'
+            + '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;' + (r.sla_violations > 0 ? 'color:var(--red);font-weight:700;' : 'color:var(--green);') + '">' + r.sla_violations + '</td>'
+            + '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;">' + r.avg_cpu + '%</td>';
         tbody.appendChild(row);
     });
 

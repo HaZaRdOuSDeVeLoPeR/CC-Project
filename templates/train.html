@@ -116,6 +116,23 @@
                 </div>
             </div>
 
+            <div class="param-group" id="pg_AVG_INCOMING_REQUESTS_VARIANCE">
+                <div class="param-label">Traffic Variance (λ ±)</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="f_AVG_INCOMING_REQUESTS_VARIANCE" value="{{ config.AVG_INCOMING_REQUESTS_VARIANCE }}" min="0">
+                    <span class="param-validation-icon">●</span>
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)">
+                    <span class="arrow">▶</span> Description &amp; Rules
+                </div>
+                <div class="param-hint-body">
+                    <b>What:</b> Each episode, λ is re-sampled uniformly from [λ − var, λ + var]. Set to 0 for fixed traffic.<br>
+                    <b>Why:</b> Forces the agent to generalise across light and heavy traffic regimes rather than overfitting to one load level. DQN with variance > 0 will outperform baselines more robustly in real deployments.<br>
+                    <div id="rule_AVG_INCOMING_REQUESTS_VARIANCE"></div>
+                    <div class="hint-rule info">▸ Range: 0 – λ. 0 = fixed λ each episode. Recommended: 30–50% of λ.</div>
+                </div>
+            </div>
+
             <div class="param-group" id="pg_AVG_REQUEST_WORKLOAD">
                 <div class="param-label">Avg Request Workload</div>
                 <div class="param-input-row">
@@ -359,7 +376,7 @@
                 </div>
                 <div class="param-hint-body">
                     <b>What:</b> Width of the two hidden layers in the DQN network. More neurons = more representational capacity.<br>
-                    <b>Rule:</b> Should be at least 2× state_size (= N×3+2). For N=10, state=32, so 64+ is minimum. 128 is standard.<br>
+                    <b>Rule:</b> Should be at least 2× state_size (= N×3+3). For N=10, state=33, so 66+ is minimum. 128 is standard.<br>
                     <div id="rule_HIDDEN_DIM"></div>
                     <div class="hint-rule info">▸ CPU: 64–128. GPU: 128–512.</div>
                 </div>
@@ -503,6 +520,7 @@ function ruleHtml(pass, text) {
 function runAllValidations() {
     var N    = iv('f_SERVER_COUNT');
     var lam  = iv('f_AVG_INCOMING_REQUESTS');
+    var lamv = iv('f_AVG_INCOMING_REQUESTS_VARIANCE');
     var wl   = iv('f_AVG_REQUEST_WORKLOAD');
     var wlv  = iv('f_REQUEST_WORKLOAD_VARIANCE');
     var pp   = iv('f_PROCESSING_POWER');
@@ -519,9 +537,11 @@ function runAllValidations() {
     var tup  = iv('f_TARGET_UPDATE_STEPS');
     var hd   = iv('f_HIDDEN_DIM');
 
-    var stateSize = N * 3 + 2;
+    var stateSize = N * 3 + 3;
     var actionSize = N * (N + 1) / 2;
-    var arrival = lam * wl;
+    // Use peak λ (avg + variance) for throughput check so we handle worst-case load
+    var lamPeak = lam + lamv;
+    var arrival = lamPeak * wl;
     var throughput = N * pp;
     var ok_throughput = throughput >= arrival;
 
@@ -534,8 +554,16 @@ function runAllValidations() {
     r = document.getElementById('rule_AVG_INCOMING_REQUESTS');
     if (r) r.innerHTML =
         ruleHtml(lam >= 1, 'Must be ≥ 1') +
-        ruleHtml(ok_throughput, 'Fleet throughput (' + throughput.toFixed(0) + ') ' + (ok_throughput ? '≥' : '< ') + ' arrival demand (' + arrival.toFixed(0) + ')');
+        ruleHtml(ok_throughput, 'Peak throughput check (λ+var=' + lamPeak + '): fleet capacity (' + throughput.toFixed(0) + ') ' + (ok_throughput ? '≥' : '<') + ' peak arrival (' + arrival.toFixed(0) + ')');
     setValid('pg_AVG_INCOMING_REQUESTS', lam >= 1 && ok_throughput ? true : lam >= 1 ? null : false);
+
+    // AVG_INCOMING_REQUESTS_VARIANCE
+    r = document.getElementById('rule_AVG_INCOMING_REQUESTS_VARIANCE');
+    if (r) r.innerHTML =
+        ruleHtml(lamv >= 0, 'Must be ≥ 0 (0 = fixed λ)') +
+        ruleHtml(lamv <= lam, 'Must be ≤ λ (' + lam + ') — otherwise episodes with zero requests possible') +
+        (lamv > 0 ? '<div class="hint-rule info">ℹ λ will vary between ' + Math.max(1, lam - lamv) + ' and ' + (lam + lamv) + ' each episode</div>' : '');
+    setValid('pg_AVG_INCOMING_REQUESTS_VARIANCE', lamv >= 0 && lamv <= lam);
 
     // AVG_REQUEST_WORKLOAD
     r = document.getElementById('rule_AVG_REQUEST_WORKLOAD');
@@ -645,7 +673,7 @@ function runAllValidations() {
     updateThroughputHint();
 
     // Health panel
-    computeHealthPanel(N, lam, wl, wlv, pp, mq, sla, ep, eps, gam, lr, bs, buf, es, em, tup, hd);
+    computeHealthPanel(N, lam, lamv, wl, wlv, pp, mq, sla, ep, eps, gam, lr, bs, buf, es, em, tup, hd);
 
     // Validation summary
     var invalids = document.querySelectorAll('#config-section .param-group.invalid');
@@ -665,10 +693,11 @@ function statusChip(ok, text) {
     return '<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:'+bg+';color:'+color+';border:1px solid '+border+';font-weight:600;">'+(ok?'✓':'✗')+' '+text+'</span>';
 }
 
-function computeHealthPanel(N, lam, wl, wlv, pp, mq, sla, ep, eps, gam, lr, bs, buf, es, em, tup, hd) {
-    var stateSize       = N * 3 + 2;
-    var arrival         = lam * wl;
-    var peakArrival     = lam * (wl + wlv);
+function computeHealthPanel(N, lam, lamv, wl, wlv, pp, mq, sla, ep, eps, gam, lr, bs, buf, es, em, tup, hd) {
+    var stateSize       = N * 3 + 3;
+    var lamPeak         = lam + lamv;
+    var arrival         = lam * wl;           // avg-case arrival
+    var peakArrival     = lamPeak * (wl + wlv); // worst-case: peak λ × peak workload
     var throughput      = N * pp;
     var utilPct         = throughput > 0 ? (arrival / throughput * 100) : 999;
     var peakUtilPct     = throughput > 0 ? (peakArrival / throughput * 100) : 999;
@@ -684,18 +713,25 @@ function computeHealthPanel(N, lam, wl, wlv, pp, mq, sla, ep, eps, gam, lr, bs, 
 
     var checks = [
         {
-            label: 'Throughput balance',
-            desc:  'λ × workload vs fleet throughput (N × proc_power)',
-            val:   arrival.toFixed(0) + ' CPU/step arriving vs ' + throughput + ' capacity (' + utilPct.toFixed(0) + '% utilization)',
+            label: 'Throughput balance (avg load)',
+            desc:  'avg λ × workload vs fleet throughput (N × proc_power)',
+            val:   arrival.toFixed(0) + ' CPU/step avg vs ' + throughput + ' capacity (' + utilPct.toFixed(0) + '% utilization)',
             ok:    utilPct < 90,
             tip:   utilPct >= 90 ? 'Reduce AVG_INCOMING_REQUESTS or increase PROCESSING_POWER. Recommended λ for 70% load: ' + recLambda : null
         },
         {
             label: 'Peak burst headroom',
-            desc:  'Worst-case step: λ × (workload + variance)',
+            desc:  'Worst-case: (λ + λ_var) × (workload + wl_var)',
             val:   peakArrival.toFixed(0) + ' CPU/step peak vs ' + throughput + ' capacity (' + peakUtilPct.toFixed(0) + '%)',
             ok:    peakUtilPct <= 120,
-            tip:   peakUtilPct > 120 ? 'Reduce REQUEST_WORKLOAD_VARIANCE or increase PROCESSING_POWER / SERVER_COUNT' : null
+            tip:   peakUtilPct > 120 ? 'Reduce REQUEST_WORKLOAD_VARIANCE / AVG_INCOMING_REQUESTS_VARIANCE or increase PROCESSING_POWER' : null
+        },
+        {
+            label: 'Traffic variance range',
+            desc:  'λ per episode drawn from [λ−var, λ+var]',
+            val:   lamv > 0 ? 'λ ∈ [' + Math.max(1, lam - lamv) + ', ' + (lam + lamv) + '] — ' + (lamv / lam * 100).toFixed(0) + '% spread around mean' : 'fixed λ = ' + lam + ' (variance = 0)',
+            ok:    lamv >= 0 && lamv <= lam,
+            tip:   lamv > lam ? 'Reduce AVG_INCOMING_REQUESTS_VARIANCE to ≤ λ (' + lam + ') — otherwise some episodes will have zero requests' : null
         },
         {
             label: 'SLA threshold placement',
@@ -728,7 +764,7 @@ function computeHealthPanel(N, lam, wl, wlv, pp, mq, sla, ep, eps, gam, lr, bs, 
         {
             label: 'Hidden dim vs state size',
             desc:  'Network should be wide enough to represent the state',
-            val:   'state=' + stateSize + ' dims (N×3+2), hidden=' + hd,
+            val:   'state=' + stateSize + ' dims (N×3+3), hidden=' + hd,
             ok:    hd >= stateSize * 2,
             tip:   hd < stateSize * 2 ? 'Increase HIDDEN_DIM to ≥ ' + (stateSize * 2) : null
         },
@@ -791,18 +827,22 @@ function computeHealthPanel(N, lam, wl, wlv, pp, mq, sla, ep, eps, gam, lr, bs, 
 }
 
 function updateThroughputHint() {
-    var N   = iv('f_SERVER_COUNT');
-    var lam = iv('f_AVG_INCOMING_REQUESTS');
-    var wl  = iv('f_AVG_REQUEST_WORKLOAD');
-    var pp  = iv('f_PROCESSING_POWER');
+    var N    = iv('f_SERVER_COUNT');
+    var lam  = iv('f_AVG_INCOMING_REQUESTS');
+    var lamv = iv('f_AVG_INCOMING_REQUESTS_VARIANCE');
+    var wl   = iv('f_AVG_REQUEST_WORKLOAD');
+    var pp   = iv('f_PROCESSING_POWER');
     var arrival    = lam * wl;
     var throughput = N * pp;
     var ok = throughput >= arrival;
     var el = document.getElementById('throughput-hint');
     if (!el) return;
+    var lambdaStr = lamv > 0
+        ? 'λ ∈ [' + Math.max(1, lam - lamv) + ', ' + (lam + lamv) + '] per episode (avg=' + lam + ')'
+        : 'λ = ' + lam + ' (fixed)';
     el.innerHTML =
         '⚡ <b>Heterogeneous fleet</b>: each server speed ~ Uniform(' + (pp*0.3).toFixed(1) + ', ' + (pp*1.7).toFixed(1) + '), mean=' + pp + '<br>' +
-        'Avg fleet throughput: <b>' + throughput + ' CPU/step</b> vs arrival demand: <b>' + arrival + ' CPU/step</b> — ' +
+        'Traffic: <b>' + lambdaStr + '</b> · Avg arrival demand: <b>' + arrival + ' CPU/step</b> · Fleet throughput: <b>' + throughput + ' CPU/step</b> — ' +
         (ok ? '<span style="color:var(--green);">✓ can handle load</span>' : '<span style="color:var(--red);">✗ queues will grow</span>') +
         '<br><span style="color:var(--text-dim);font-size:10px;">DQN sees server speeds in state — LC/RR/Random do not. This is the key advantage.</span>';
     el.style.borderColor = ok ? 'rgba(0,229,255,.15)' : 'rgba(255,59,92,.2)';
@@ -854,6 +894,7 @@ function collectConfig() {
     return {
         SERVER_COUNT:              iv('f_SERVER_COUNT'),
         AVG_INCOMING_REQUESTS:     iv('f_AVG_INCOMING_REQUESTS'),
+        AVG_INCOMING_REQUESTS_VARIANCE: iv('f_AVG_INCOMING_REQUESTS_VARIANCE'),
         AVG_REQUEST_WORKLOAD:      iv('f_AVG_REQUEST_WORKLOAD'),
         REQUEST_WORKLOAD_VARIANCE: iv('f_REQUEST_WORKLOAD_VARIANCE'),
         MAX_SERVER_UTILIZATION:    100,
