@@ -161,7 +161,17 @@ http://localhost:5000
 ## 👨‍💻 Author
 
 Aditya Vimal  
-B.Tech CSE, NIT Warangal  
+B.Tech CSE  
+NIT Warangal  
+  
+Sameer Lucky  
+B.Tech CSE  
+NIT Warangal  
+  
+Parth Yogesh Dhat  
+B.Tech CSE  
+NIT Warangal   
+
 
 ---
 
