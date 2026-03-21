@@ -14,43 +14,143 @@
     ⚠ No trained model found yet. <a href="/train" style="color:var(--accent);">Train a model first →</a> — you can still configure eval parameters below.
 </div>
 
+<!-- Param hint styles (mirrors train.html) -->
+<style>
+.param-group { margin-bottom:1.2rem; }
+.param-label { display:flex;align-items:center;justify-content:space-between;font-size:11px;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase; }
+.param-input-row { position:relative; }
+.param-input-row .form-input { padding-right:32px; }
+.param-hint-trigger { display:flex;align-items:center;gap:5px;margin-top:5px;font-size:10px;color:var(--text-muted);cursor:pointer;user-select:none;transition:color .15s; }
+.param-hint-trigger:hover { color:var(--text-dim); }
+.param-hint-trigger .arrow { font-size:8px;transition:transform .2s;display:inline-block; }
+.param-hint-trigger.open .arrow { transform:rotate(90deg); }
+.param-hint-body { display:none;margin-top:6px;font-size:10.5px;color:var(--text-dim);background:var(--bg);border-left:2px solid var(--border);padding:8px 12px;border-radius:0 4px 4px 0;line-height:1.7; }
+.param-hint-body.open { display:block; }
+.hint-rule.info { color:var(--text-dim); }
+</style>
+
+<script>
+function toggleHint(trigger) {
+    trigger.classList.toggle('open');
+    var body = trigger.nextElementSibling;
+    if (body) body.classList.toggle('open');
+}
+</script>
+
 <!-- Config -->
 <div id="eval-config" class="card" style="margin-bottom:1.5rem;">
     <div class="card-label">Evaluation Parameters</div>
-    <div class="form-grid" style="margin-bottom:1rem;">
-        <div class="form-group">
-            <label class="form-label">Test Episodes</label>
-            <input class="form-input" type="number" id="e_TEST_EPISODE_COUNT" value="300" min="1">
+    <div class="grid-2" style="gap:1.5rem;margin-bottom:1rem;">
+
+        <!-- Left column -->
+        <div>
+            <div class="param-group">
+                <div class="param-label">Test Episodes</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="e_TEST_EPISODE_COUNT" value="300" min="1">
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
+                <div class="param-hint-body">
+                    <b>What:</b> How many episodes each method is evaluated over. More episodes give more stable statistics.<br>
+                    <div class="hint-rule info">▸ Recommended: 100–500. Each method runs this many full episodes.</div>
+                </div>
+            </div>
+
+            <div class="param-group">
+                <div class="param-label">Episode Length (steps)</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="e_EPISODE_LENGTH" value="500" min="10">
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
+                <div class="param-hint-body">
+                    <b>What:</b> Timesteps per episode. Each episode resets the environment with freshly randomised server speeds.<br>
+                    <b>Note:</b> Should match the value used during training for a fair comparison.<br>
+                    <div class="hint-rule info">▸ Range: 10+. Recommended: 200–1000.</div>
+                </div>
+            </div>
+
+            <div class="param-group">
+                <div class="param-label">Avg Requests / Step (λ)</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="e_AVG_INCOMING_REQUESTS" value="5" min="1">
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
+                <div class="param-hint-body">
+                    <b>What:</b> Poisson arrival rate λ. Each timestep, Poisson(λ) requests arrive and must be routed.<br>
+                    <b>Total CPU demand per step</b> = λ × avg_workload.<br>
+                    <div class="hint-rule info">▸ Range: 1+. Should match training for a fair eval.</div>
+                </div>
+            </div>
+
+            <div class="param-group">
+                <div class="param-label">Avg Request Workload</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="e_AVG_REQUEST_WORKLOAD" value="10" min="1">
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
+                <div class="param-hint-body">
+                    <b>What:</b> Average CPU units each request requires from the target server.<br>
+                    <b>Rule:</b> Workload must be ≥ variance.<br>
+                    <div class="hint-rule info">▸ Range: 1+. Recommended: 5–20.</div>
+                </div>
+            </div>
         </div>
-        <div class="form-group">
-            <label class="form-label">Episode Length</label>
-            <input class="form-input" type="number" id="e_EPISODE_LENGTH" value="500" min="10">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Avg Requests / Step (λ)</label>
-            <input class="form-input" type="number" id="e_AVG_INCOMING_REQUESTS" value="5" min="1">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Avg Request Workload</label>
-            <input class="form-input" type="number" id="e_AVG_REQUEST_WORKLOAD" value="10" min="1">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Workload Variance (±)</label>
-            <input class="form-input" type="number" id="e_REQUEST_WORKLOAD_VARIANCE" value="5" min="0">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Processing Power</label>
-            <input class="form-input" type="number" id="e_PROCESSING_POWER" value="10" min="1">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Max Queue Length</label>
-            <input class="form-input" type="number" id="e_MAX_QUEUE_LENGTH" value="200" min="1">
-        </div>
-        <div class="form-group">
-            <label class="form-label">SLA Threshold</label>
-            <input class="form-input" type="number" id="e_SLA_VIOLATION_LATENCY" value="80" min="1">
+
+        <!-- Right column -->
+        <div>
+            <div class="param-group">
+                <div class="param-label">Workload Variance (±)</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="e_REQUEST_WORKLOAD_VARIANCE" value="5" min="0">
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
+                <div class="param-hint-body">
+                    <b>What:</b> Workload drawn from Uniform(avg−var, avg+var) — controls request size variability.<br>
+                    <b>Rule:</b> Must be ≤ avg_workload (otherwise negative workloads possible).<br>
+                    <div class="hint-rule info">▸ Range: 0 – avg_workload. 0 = deterministic.</div>
+                </div>
+            </div>
+
+            <div class="param-group">
+                <div class="param-label">Avg Processing Power</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="e_PROCESSING_POWER" value="10" min="1">
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
+                <div class="param-hint-body">
+                    <b>What:</b> Mean CPU units each server processes per step. Each server gets a <em>unique</em> speed drawn from Uniform(avg×0.3, avg×1.7) — this heterogeneity is exactly what DQN exploits over classical baselines.<br>
+                    <div class="hint-rule info">▸ Recommended: set so N×power ≥ λ×workload (fleet can handle load).</div>
+                </div>
+            </div>
+
+            <div class="param-group">
+                <div class="param-label">Max Queue Length</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="e_MAX_QUEUE_LENGTH" value="200" min="1">
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
+                <div class="param-hint-body">
+                    <b>What:</b> Hard cap on each server's queue depth. Requests that would exceed this are clipped.<br>
+                    <b>Rule:</b> Should be at least 2× SLA threshold — otherwise SLA fires immediately under any load.<br>
+                    <div class="hint-rule info">▸ Range: 10+. Recommended: 100–500.</div>
+                </div>
+            </div>
+
+            <div class="param-group">
+                <div class="param-label">SLA Latency Threshold</div>
+                <div class="param-input-row">
+                    <input class="form-input" type="number" id="e_SLA_VIOLATION_LATENCY" value="80" min="1">
+                </div>
+                <div class="param-hint-trigger" onclick="toggleHint(this)"><span class="arrow">▶</span> Description &amp; Rules</div>
+                <div class="param-hint-body">
+                    <b>What:</b> If average fleet queue depth exceeds this value at any step, an SLA violation is counted for that step.<br>
+                    <b>Rule:</b> Must be &lt; max_queue_length (otherwise SLA can never trigger).<br>
+                    <div class="hint-rule info">▸ Range: 1 – max_queue. Recommended: 40–100.</div>
+                </div>
+            </div>
         </div>
     </div>
+
     <input type="hidden" id="e_SERVER_COUNT" value="10">
     <div style="padding:10px 12px;border-radius:6px;background:var(--surface);border:1px solid var(--border);font-size:11px;margin-bottom:1rem;">
         🔒 <b>Server Count</b>: <span id="e_SERVER_COUNT_display" style="color:var(--accent);font-weight:600;">loading…</span>
@@ -97,6 +197,9 @@
 
     <!-- Summary table -->
     <div class="card" style="margin-bottom:1.5rem;overflow-x:auto;">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">
+            Sorted by composite score: <code style="font-size:9px;color:var(--text-dim);">reward − 0.1×std − 10×latency − 0.01×sla_violations − 5×avg_cpu</code>
+        </div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead>
                 <tr style="border-bottom:1px solid var(--border);">
@@ -303,28 +406,49 @@ function updateEvalUI(data) {
     }
 }
 
+function compositeScore(r) {
+    // Higher is better. Normalise each metric to a contribution:
+    //   + mean_reward (already higher=better)
+    //   - std_reward  (lower variance is better — penalise instability)
+    //   - avg_latency (lower is better)
+    //   - sla_violations (lower is better — heaviest weight as it is a hard SLA)
+    //   - avg_cpu     (lower is better for efficiency)
+    if (!r) return -Infinity;
+    return r.mean_reward
+           - 0.1  * r.std_reward
+           - 10   * r.avg_latency
+           - 0.01 * r.sla_violations
+           - 5    * r.avg_cpu;
+}
+
 function renderSummary(results, evalData) {
     document.getElementById('results-section').style.display = 'block';
     var methods = ['dqn','random','round_robin','least_connections'];
     var methodColors = {dqn:'var(--accent)', random:'var(--accent3)', round_robin:'var(--accent2)', least_connections:'var(--green)'};
     var methodNames  = {dqn:'DQN Agent', random:'Random', round_robin:'Round Robin', least_connections:'Least Conn.'};
 
-    // Find winner
-    var best = methods.reduce(function(a,b){ return (results[a]||{mean_reward:-Infinity}).mean_reward > (results[b]||{mean_reward:-Infinity}).mean_reward ? a : b; });
+    // Sort methods by composite score (best first)
+    var sorted = methods.slice().sort(function(a, b) {
+        return compositeScore(results[b]) - compositeScore(results[a]);
+    });
+    var best = sorted[0];
+
     document.getElementById('winner-banner').innerHTML =
         '🏆 Best performing strategy: <b style="color:' + methodColors[best] + '">' + methodNames[best] + '</b> — Mean Reward: <b>' + (results[best]||{}).mean_reward + '</b>';
 
-    // Table
+    // Table — render rows in sorted order
     var tbody = document.getElementById('results-tbody');
     tbody.innerHTML = '';
-    methods.forEach(function(m) {
+    sorted.forEach(function(m, rank) {
         var r   = results[m];
         if (!r) return;
         var row = document.createElement('tr');
         row.style.borderBottom = '1px solid var(--border)';
         var isBest = m === best;
+        var rankLabel = ['🥇','🥈','🥉','4th'][rank] || (rank+1)+'th';
         row.innerHTML =
-            '<td style="padding:12px;"><span style="color:' + methodColors[m] + ';font-weight:600;">' + methodNames[m] + (isBest ? ' <span class="badge badge-done" style="font-size:9px;margin-left:4px;">BEST</span>' : '') + '</span></td>' +
+            '<td style="padding:12px;"><span style="color:' + methodColors[m] + ';font-weight:600;">' + methodNames[m] + (isBest ? ' <span class="badge badge-done" style="font-size:9px;margin-left:4px;">BEST</span>' : '') + '</span>' +
+            '<span style="margin-left:6px;font-size:10px;color:var(--text-muted);">' + rankLabel + '</span></td>' +
             '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;' + (isBest?'color:var(--green);font-weight:700;':'color:var(--red);') + '">' + r.mean_reward + '</td>' +
             '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;color:var(--text-dim);">±' + r.std_reward + '</td>' +
             '<td style="padding:12px;text-align:right;font-family:JetBrains Mono;font-weight:700;">' + r.avg_latency + '</td>' +
@@ -360,60 +484,81 @@ function renderDqnDiagnostics(evalData) {
     var n     = evalData ? evalData.dqn_action_size  : 0;
     if (!dist || !n) { panel.style.display = 'none'; return; }
 
+    var procRates = (evalData && evalData.dqn_proc_rates) ? evalData.dqn_proc_rates : [];
+    var maxRate   = procRates.length ? Math.max.apply(null, procRates) : 1;
+
     var totalSteps = 0, topAction = 0, topCount = 0;
     for (var k in dist) { totalSteps += dist[k]; if (dist[k] > topCount) { topCount = dist[k]; topAction = parseInt(k); } }
 
-    // Check if routing is spread (healthy) or concentrated (potential issue)
-    var uniqueActions = Object.keys(dist).filter(function(k){ return dist[k] > 0; }).length;
+    var uniqueActions  = Object.keys(dist).filter(function(k){ return dist[k] > 0; }).length;
     var isConcentrated = topCount > totalSteps * 0.6;
     var bg = isConcentrated ? 'rgba(255,214,0,0.06)' : 'rgba(0,229,255,0.04)';
     var bd = isConcentrated ? 'rgba(255,214,0,0.25)' : 'rgba(0,229,255,0.15)';
     var headline = isConcentrated
-        ? '<b style="color:var(--yellow);">Agent concentrates on action ' + topAction + ' (' + (topCount/totalSteps*100).toFixed(1) + '% of steps).</b> ' +
-          'With heterogeneous servers this may be correct — this pair may route to the fastest servers in this episode.'
-        : '<b style="color:var(--green);">DQN distributes across ' + uniqueActions + ' different action pairs.</b> ' +
-          'With heterogeneous speeds, DQN learns to prefer faster server pairs — this is the advantage over classical baselines.';
+        ? '<b style="color:var(--yellow);">Agent concentrates on SERVER ' + topAction + ' (' + (topCount/totalSteps*100).toFixed(1) + '% of steps).</b> ' +
+          'With heterogeneous servers this is expected — this server likely has the best speed/queue ratio.'
+        : '<b style="color:var(--green);">DQN distributes across ' + uniqueActions + ' different servers.</b> ' +
+          'With heterogeneous speeds, DQN learns to prefer faster servers with shorter queues — this is the advantage over classical baselines.';
 
-    // Decode action pairs from evalData action_map
-    var evalAmap = (evalData && evalData.action_map) ? evalData.action_map : null;
-    function evalActionLabel(idx) {
-        if (!evalAmap || idx >= evalAmap.length) return 'A'+idx;
-        var p = evalAmap[idx];
-        return (p[0] === p[1]) ? 'S'+p[0] : 'S'+p[0]+'↔'+p[1];
-    }
     var maxCount = Math.max.apply(null, Object.values(dist).map(Number).concat([1]));
-    // Sort by count desc, show top 20 to keep UI readable with large action spaces
+    // Sort by selection count descending so most-favoured servers appear first
     var allEntries = Object.keys(dist).map(function(k){ return {idx:parseInt(k), cnt:dist[k]}; })
         .sort(function(a,b){ return b.cnt - a.cnt; });
     var topEntries = allEntries.slice(0, 20);
+
     var bars = '';
     topEntries.forEach(function(e) {
-        var w   = (e.cnt / maxCount * 100).toFixed(0);
-        var lbl = evalActionLabel(e.idx);
-        bars += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">' +
-            '<span style="font-size:9px;color:var(--text-muted);width:54px;text-align:right;flex-shrink:0;">' + lbl + '</span>' +
-            '<div style="flex:1;background:var(--border);border-radius:2px;height:11px;">' +
-            '<div style="width:'+w+'%;background:var(--accent);height:100%;border-radius:2px;"></div></div>' +
-            '<span style="font-size:9px;color:var(--text-dim);width:38px;text-align:right;">'+e.cnt+'</span></div>';
+        var selW  = (e.cnt / maxCount * 100).toFixed(0);
+        var rate  = procRates.length > e.idx ? procRates[e.idx] : null;
+        var speedW = rate !== null ? (rate / maxRate * 100).toFixed(0) : 0;
+        // Colour-code the speed bar: green=fast, yellow=mid, red=slow
+        var speedColor = rate !== null
+            ? (rate >= maxRate * 0.75 ? 'var(--green)' : rate >= maxRate * 0.45 ? 'var(--yellow)' : 'var(--red)')
+            : 'var(--border)';
+        var speedLabel = rate !== null ? rate.toFixed(1) : '—';
+        bars += '<div style="display:grid;grid-template-columns:28px 1fr 52px 80px 42px;align-items:center;gap:6px;margin-bottom:5px;">' +
+            // Server label
+            '<span style="font-size:9px;color:var(--text-muted);text-align:right;">S' + e.idx + '</span>' +
+            // Selection bar
+            '<div style="background:var(--border);border-radius:2px;height:10px;">' +
+            '<div style="width:'+selW+'%;background:var(--accent);height:100%;border-radius:2px;"></div></div>' +
+            // Selection count
+            '<span style="font-size:9px;color:var(--text-dim);text-align:right;">' + e.cnt + '</span>' +
+            // Speed bar
+            '<div style="background:var(--border);border-radius:2px;height:10px;">' +
+            '<div style="width:'+speedW+'%;background:'+speedColor+';height:100%;border-radius:2px;opacity:.75;"></div></div>' +
+            // Speed label
+            '<span style="font-size:9px;color:'+speedColor+';text-align:right;font-family:JetBrains Mono;">' + speedLabel + ' cpu/s</span>' +
+            '</div>';
     });
     if (allEntries.length > 20) {
-        bars += '<div style="font-size:9px;color:var(--text-muted);margin-top:4px;">… ' + (allEntries.length-20) + ' more pairs not shown</div>';
+        bars += '<div style="font-size:9px;color:var(--text-muted);margin-top:4px;">… ' + (allEntries.length-20) + ' more servers not shown</div>';
     }
+
+    // Column headers for the bar section
+    var barHeader = '<div style="display:grid;grid-template-columns:28px 1fr 52px 80px 42px;align-items:center;gap:6px;margin-bottom:7px;">' +
+        '<span></span>' +
+        '<span style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;">Selections ↓</span>' +
+        '<span></span>' +
+        '<span style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;">Proc. Speed</span>' +
+        '<span></span></div>';
 
     panel.style.display = 'block';
     panel.innerHTML =
         '<div style="padding:14px 16px;border-radius:8px;background:'+bg+';border:1px solid '+bd+';">' +
-        '<div style="font-size:11px;font-weight:600;margin-bottom:8px;">DQN Action Analysis (sampled from episode 1)</div>' +
+        '<div style="font-size:11px;font-weight:600;margin-bottom:8px;">DQN Action Analysis</div>' +
         '<div style="font-size:11px;margin-bottom:12px;">' + headline + '</div>' +
         '<div style="display:grid;grid-template-columns:200px 1fr;gap:20px;">' +
         '<div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:8px;">Step breakdown</div>' +
         '<div style="font-size:11px;font-family:JetBrains Mono;line-height:2.2;">' +
-        '<span style="color:var(--accent);">Route (action pairs):</span> ' + totalSteps + ' steps (100%)<br>' +
-        '<span style="color:var(--text-dim);">Unique pairs used:</span> ' + uniqueActions + '<br>' +
-        '<span style="color:var(--text-dim);">Top pair:</span> ' + evalActionLabel(topAction) + ' (' + topCount + ' steps)' +
+        '<span style="color:var(--accent);">Total steps:</span> ' + totalSteps + '<br>' +
+        '<span style="color:var(--text-dim);">Unique servers used:</span> ' + uniqueActions + '<br>' +
+        '<span style="color:var(--text-dim);">Top server:</span> S' + topAction + ' (' + topCount + ' steps)' +
+        (procRates.length > topAction ? '<br><span style="color:var(--text-dim);">Top server speed:</span> <span style="color:var(--green);">' + procRates[topAction].toFixed(1) + ' cpu/s</span>' : '') +
         '</div></div>' +
-        '<div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:8px;">Action index distribution</div>' +
-        bars + '</div></div></div>';
+        '<div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:8px;">Server selection vs processing speed</div>' +
+        '<div style="font-size:9px;color:var(--text-muted);margin-bottom:8px;">Bars sorted by selection count. Speed colour: <span style="color:var(--green);">■</span> fast &nbsp;<span style="color:var(--yellow);">■</span> mid &nbsp;<span style="color:var(--red);">■</span> slow</div>' +
+        barHeader + bars + '</div></div></div>';
 }
 
 function initCharts() {

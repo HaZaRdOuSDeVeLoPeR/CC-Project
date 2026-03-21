@@ -96,8 +96,7 @@ def run_training(cfg):
         env.server_capacity = max_util
 
         state_size  = len(env.reset())
-        action_size = len(env.action_map)
-        training_state["action_map"] = [[a, b] for a, b in env.action_map]
+        action_size = env.num_servers  # one action per server
         training_state["n_servers"]  = n_servers
 
         agent = DQNAgent(
@@ -137,13 +136,10 @@ def run_training(cfg):
                 q_max    = float(raw_q.max())
                 q_min    = float(raw_q.min())
                 best_act = int(raw_q.argmax())
-                amap = env.action_map
-                best_pair = amap[best_act] if best_act < len(amap) else (best_act, best_act)
                 snapshot = {
                     "ep": episode + 1, "max": round(q_max, 3),
                     "min": round(q_min, 3), "mean": round(float(raw_q.mean()), 3),
                     "spread": round(q_max - q_min, 3), "best": best_act,
-                    "best_a": best_pair[0], "best_b": best_pair[1],
                     "routing": True,
                 }
                 hist = training_state.get("q_history", [])
@@ -206,7 +202,7 @@ def run_evaluation(cfg):
         state_size = int(weights["network.0.weight"].shape[1])
         action_size= int(weights["network.4.weight"].shape[0])
         hidden_dim = int(weights["network.0.weight"].shape[0])
-        num_servers_from_model = int((np.sqrt(8 * action_size + 1) - 1) / 2)  # action_size == num_servers
+        num_servers_from_model = action_size  # action_size == num_servers (one action per server)
 
         # Patch env constants
         import cloud_env_simulator as _cem
@@ -237,16 +233,13 @@ def run_evaluation(cfg):
         dqn_net = DQN(state_size, action_size, hidden_dim)
         dqn_net.load_state_dict(weights)
         dqn_net.eval()
-        # Build action_map for label decoding in frontend
-        from cloud_env_simulator import CloudEnvironment as _CE
-        _env_tmp = _CE(num_servers=n_servers)
-        eval_state["action_map"] = [[a, b] for a, b in _env_tmp.action_map]
 
         methods = ["dqn", "random", "round_robin", "least_connections"]
         all_results = {m: [] for m in methods}
         all_metrics = {m: {"avg_latency": [], "sla_violations": [], "cpu_utilization": [],
                            "rewards": []} for m in methods}
         action_counts = {i: 0 for i in range(action_size)}
+        dqn_proc_rates = []  # captured from first DQN episode
 
         total_runs = len(methods) * episodes
         completed  = 0
@@ -261,6 +254,9 @@ def run_evaluation(cfg):
                 env.server_capacity = max_util
 
                 state         = env.reset()
+                # Capture server processing rates from first DQN episode
+                if method == "dqn" and ep == 0:
+                    dqn_proc_rates = [round(float(r), 2) for r in env.proc_rates]
                 total_reward  = 0.0
                 ep_latency    = []
                 ep_sla        = 0
@@ -278,20 +274,14 @@ def run_evaluation(cfg):
                         action_counts[action] = action_counts.get(action, 0) + 1
 
                     elif method == "random":
-                        action = np.random.randint(len(env.action_map))
+                        action = np.random.randint(n_servers)
 
                     elif method == "round_robin":
-                        action = rr_counter % len(env.action_map)
+                        action = rr_counter % n_servers
                         rr_counter += 1
 
                     else:  # least_connections
-                        queues = env.queues
-                        idx = np.argsort(queues)[:2]  # best 2 servers
-
-                        i, j = int(idx[0]), int(idx[1])
-                        pair = (min(i, j), max(i, j))
-
-                        action = env.action_map.index(pair)
+                        action = int(np.argmin(env.queues[:n_servers]))
 
                     state, reward, done = env.step(action)
                     total_reward += reward
@@ -339,6 +329,7 @@ def run_evaluation(cfg):
         eval_state["results"]        = {m: summarise(m) for m in methods}
         eval_state["dqn_action_dist"]= action_counts
         eval_state["dqn_action_size"]= action_size
+        eval_state["dqn_proc_rates"] = dqn_proc_rates
         eval_state["done"]           = True
         eval_state["running"]        = False
 
@@ -381,7 +372,7 @@ def start_training():
         "rewards": [], "epsilon": float(cfg.get("EPSILON_START", 1.0)),
         "done": False, "error": None, "q_values": [], "q_history": [],
         "q_meta": None, "device": str(cfg.get("DEVICE", "cpu")),
-        "action_map": [], "n_servers": int(cfg.get("SERVER_COUNT", 10)),
+        "n_servers": int(cfg.get("SERVER_COUNT", 10)),
     }
     threading.Thread(target=run_training, args=(cfg,), daemon=True).start()
     return jsonify({"status": "started"})
@@ -400,7 +391,6 @@ def training_status():
         "q_history":      training_state.get("q_history", []),
         "q_meta":         training_state.get("q_meta"),
         "device":         training_state.get("device", "cpu"),
-        "action_map":     training_state.get("action_map", []),
         "n_servers":      training_state.get("n_servers", 10),
     })
 
@@ -421,7 +411,7 @@ def start_evaluation():
         "running": True, "progress": 0, "total": total,
         "done": False, "error": None, "results": None,
         "step_metrics": {}, "dqn_action_dist": {}, "dqn_action_size": 0,
-        "action_map": [],
+        "dqn_proc_rates": [],
     }
     threading.Thread(target=run_evaluation, args=(cfg,), daemon=True).start()
     return jsonify({"status": "started"})
@@ -438,7 +428,7 @@ def evaluation_status():
         "step_metrics":    eval_state["step_metrics"],
         "dqn_action_dist": eval_state["dqn_action_dist"],
         "dqn_action_size": eval_state["dqn_action_size"],
-        "action_map":      eval_state.get("action_map", []),
+        "dqn_proc_rates":  eval_state.get("dqn_proc_rates", []),
     })
 
 @app.route("/api/devices")
@@ -467,7 +457,7 @@ def model_meta():
         w = torch.load(model_path, map_location="cpu", weights_only=True)
         state_size  = int(w["network.0.weight"].shape[1])
         action_size = int(w["network.4.weight"].shape[0])
-        num_servers = int((np.sqrt(8 * action_size + 1) - 1) / 2)  # action_size == num_servers
+        num_servers = action_size  # action_size == num_servers (one action per server)
         # state_size = num_servers * 3 + 2  (cpu, queues, proc_rates, avg_lat, mean_cpu)
         return jsonify({
             "has_meta":    True,

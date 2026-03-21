@@ -19,7 +19,7 @@ def train():
     env = CloudEnvironment(num_servers=SERVER_COUNT)
 
     state_size  = len(env.reset())
-    action_size = len(env.action_map)  # one action per server
+    action_size = env.num_servers  # one action per server
 
     agent = DQNAgent(
         state_size=state_size,

@@ -21,13 +21,13 @@ class CloudEnvironment:
       - DQN observes both queue depths AND server speeds and learns to
         jointly optimise: prefer servers that are fast AND have short queues.
 
-    Action space: SERVER_COUNT actions, one per server.
+    Action space: SERVER_COUNT actions — one per server.
       action i  →  route all incoming requests this step to server i
 
     State (size = SERVER_COUNT * 3 + 2):
-      cpu_usage[0..N-1]          normalised queue / MAX_QUEUE_LENGTH
-      queues[0..N-1]             normalised queue length
-      proc_rates[0..N-1]         normalised server speed / max_proc_rate
+      cpu_usage[0..N-1]          fraction of processing capacity used this step (0=idle, 1=saturated)
+      queues[0..N-1]             normalised queue length (queue / MAX_QUEUE_LENGTH)
+      proc_rates[0..N-1]         normalised server speed (speed / max_speed)
       avg_latency                fleet average queue (normalised)
       mean_cpu                   fleet average cpu utilisation
 
@@ -54,11 +54,6 @@ class CloudEnvironment:
         self.proc_rates = np.clip(scaled, avg_proc_rate / 3, avg_proc_rate * 3)
         self.max_proc_rate = float(self.proc_rates.max())
 
-        self.action_map = []
-        for i in range(self.num_servers):
-            for j in range(i, self.num_servers):
-                self.action_map.append((i, j))
-
         self.reset()
 
     def reset(self):
@@ -70,27 +65,26 @@ class CloudEnvironment:
         return self._get_state()
 
     def step(self, action):
+        # action is a server index (0..num_servers-1)
         # Capture queue depth BEFORE routing — immediate reward signal
-        a, b = self.action_map[action]
-        queue_before_routing = (self.queues[a] + self.queues[b]) / 2.0
+        queue_before_routing = float(self.queues[action])
 
         incoming = np.random.poisson(lam=AVG_INCOMING_REQUESTS)
         for _ in range(incoming):
-            target = a if random.random() < 0.5 else b
-
             workload = random.randint(
                 AVG_REQUEST_WORKLOAD - REQUEST_WORKLOAD_VARIANCE,
                 AVG_REQUEST_WORKLOAD + REQUEST_WORKLOAD_VARIANCE,
             )
-
-            self.queues[target] += workload
-            self.queues[target] = min(self.queues[target], MAX_QUEUE_LENGTH)
+            self.queues[action] += workload
+            self.queues[action] = min(self.queues[action], MAX_QUEUE_LENGTH)
 
         # Process queues — each server drains at its own speed
         for k in range(self.num_servers):
             processed         = min(self.proc_rates[k], self.queues[k])
             self.queues[k]   -= processed
-            self.cpu_usage[k] = self.queues[k] / self.server_capacity
+            # CPU utilization = fraction of processing capacity actually used this step
+            # 0.0 = idle, 1.0 = fully saturated
+            self.cpu_usage[k] = processed / self.proc_rates[k] if self.proc_rates[k] > 0 else 0.0
 
         avg_latency   = float(np.mean(self.queues))
         avg_latency = np.clip(avg_latency, 0, SLA_VIOLATION_LATENCY * 2)
@@ -106,7 +100,8 @@ class CloudEnvironment:
         # load imbalance
         queue_std = np.std(self.queues)
 
-        # CPU utilization
+        # CPU utilization: mean fraction of each server's proc capacity used (0=idle, 1=saturated)
+        # Rewarding utilization encourages the agent to keep servers busy rather than idle
         cpu_util = np.mean(self.cpu_usage)
 
         reward = (

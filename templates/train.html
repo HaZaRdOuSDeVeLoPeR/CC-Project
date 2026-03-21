@@ -93,7 +93,7 @@
                 </div>
                 <div class="param-hint-body">
                     <b>What:</b> Number of servers in the fleet. Each gets a unique random processing speed.<br>
-                    <b>Effect on action space:</b> Action space = N×(N+1)/2 server pairs. N=10 → 55 actions.<br>
+                    <b>Effect on action space:</b> Action space = N servers. N=10 → 10 actions.<br>
                     <div id="rule_SERVER_COUNT"></div>
                     <div class="hint-rule info">▸ Range: 2 – 50. Recommended: 5–15 for fast training.</div>
                 </div>
@@ -435,7 +435,7 @@
             <div class="stat-block"><div class="stat-label">Health</div><div id="qv-health-badge" class="badge badge-idle" style="margin-top:4px;font-size:10px;">waiting</div><div class="stat-sub" id="qv-health-hint">—</div></div>
         </div>
         <div class="grid-2" style="gap:1rem;">
-            <div class="chart-box"><div class="chart-title">Q-values per action pair (latest state)</div><canvas id="qval-chart" height="140"></canvas></div>
+            <div class="chart-box"><div class="chart-title">Q-values per server action (latest state)</div><canvas id="qval-chart" height="140"></canvas></div>
             <div class="chart-box"><div class="chart-title">Q Spread over training (convergence signal)</div><canvas id="qspread-chart" height="140"></canvas></div>
         </div>
     </div>
@@ -465,7 +465,8 @@ let selectedDevice = 'cpu';
 let pollInterval   = null;
 let chartsInitialized = false;
 let rewardChart, avgRewardChart, qvalChart, qspreadChart;
-let currentActionMap = [];  // populated from API
+let knownTotal = 0;  // set from cfg at launch, never overwritten with 0
+
 
 // ── Collapsible hint toggle ──────────────────────────────────────────────────
 function toggleHint(trigger) {
@@ -754,9 +755,10 @@ async function startTraining() {
 async function stopTraining() { await fetch('/api/stop_training', {method:'POST'}); }
 
 function showProgressSection(total, device) {
+    if (total > 0) knownTotal = total;
     document.getElementById('config-section').style.display = 'none';
     document.getElementById('progress-section').style.display = 'block';
-    document.getElementById('stat-ep-of').textContent = 'of ' + total;
+    document.getElementById('stat-ep-of').textContent = 'of ' + knownTotal;
     renderDeviceStat(device);
     if (!chartsInitialized) initCharts();
 }
@@ -770,7 +772,6 @@ function resetToConfig() {
     [rewardChart, avgRewardChart, qvalChart, qspreadChart].forEach(function(c){ if(c){c.destroy();} });
     rewardChart = avgRewardChart = qvalChart = qspreadChart = null;
     chartsInitialized = false;
-    currentActionMap = [];
 }
 
 function renderDeviceStat(device) {
@@ -791,20 +792,15 @@ function startPolling() {
 }
 
 // ── Action label helper ──────────────────────────────────────────────────────
-function actionLabel(idx, amap) {
-    if (!amap || idx >= amap.length) return 'A' + idx;
-    var pair = amap[idx];
-    if (!pair) return 'A' + idx;
-    var a = pair[0], b = pair[1];
-    return a === b ? 'S' + a : 'S' + a + '↔S' + b;
+function actionLabel(idx) {
+    return 'S' + idx;
 }
 
 function updateUI(data) {
-    // Store action map for label decoding
-    if (data.action_map && data.action_map.length > 0) currentActionMap = data.action_map;
-
-    var ep    = data.episode || 0;
-    var total = data.total_episodes || 500;
+    var ep = data.episode || 0;
+    // Only update knownTotal when server sends a real non-zero value
+    if (data.total_episodes > 0) knownTotal = data.total_episodes;
+    var total = knownTotal || 0;
     var pct   = total > 0 ? Math.min(100, Math.round(ep / total * 100)) : 0;
 
     document.getElementById('stat-episode').textContent = ep;
@@ -823,30 +819,28 @@ function updateUI(data) {
     if (data.device) renderDeviceStat(data.device);
 
     if (chartsInitialized && rewards.length) {
-        var labels = rewards.map(function(_,i){return i+1;});
-        rewardChart.data.labels = labels;
-        rewardChart.data.datasets[0].data = rewards;
+        // type:'linear' requires {x,y} point objects — parallel labels array is ignored
+        var rewardPoints = rewards.map(function(r, i) { return {x: i + 1, y: r}; });
+        rewardChart.data.datasets[0].data = rewardPoints;
         rewardChart.update('none');
-        var avgs = rewards.map(function(_,i){
-            var w = rewards.slice(Math.max(0,i-19),i+1);
-            return w.reduce(function(a,b){return a+b;},0)/w.length;
+        var avgPoints = rewards.map(function(_, i) {
+            var w = rewards.slice(Math.max(0, i - 19), i + 1);
+            return {x: i + 1, y: w.reduce(function(a, b) { return a + b; }, 0) / w.length};
         });
-        avgRewardChart.data.labels = labels;
-        avgRewardChart.data.datasets[0].data = avgs;
+        avgRewardChart.data.datasets[0].data = avgPoints;
         avgRewardChart.update('none');
     }
 
-    // Q-value chart with action pair labels
+    // Q-value chart
     try {
         if (qvalChart && data.q_values && data.q_values.length > 0) {
             var qv = data.q_values;
-            var amap = currentActionMap;
             var bestIdx = qv.indexOf(Math.max.apply(null, qv));
             // Only label every Nth bar when there are many actions
             var n = qv.length;
             var step = n > 30 ? Math.ceil(n / 20) : 1;
             qvalChart.data.labels = qv.map(function(_, i) {
-                return (i % step === 0 || i === bestIdx) ? actionLabel(i, amap) : '';
+                return (i % step === 0 || i === bestIdx) ? actionLabel(i) : '';
             });
             qvalChart.data.datasets[0].data = qv;
             qvalChart.data.datasets[0].backgroundColor = qv.map(function(_, i) {
@@ -862,17 +856,8 @@ function updateUI(data) {
         }
         if (data.q_meta) {
             var m = data.q_meta;
-            var amap2 = currentActionMap;
-            // Use decoded pair from snapshot if available
-            var bestLabel;
-            if (m.best_a !== undefined && m.best_b !== undefined) {
-                bestLabel = m.best_a === m.best_b ? 'SERVER ' + m.best_a : 'S' + m.best_a + ' ↔ S' + m.best_b;
-            } else {
-                bestLabel = actionLabel(m.best, amap2);
-            }
-            document.getElementById('qv-best-action').textContent = bestLabel;
-            document.getElementById('qv-best-type').textContent   =
-                (m.best_a !== undefined && m.best_a === m.best_b) ? 'single server' : 'server pair';
+            document.getElementById('qv-best-action').textContent = 'SERVER ' + m.best;
+            document.getElementById('qv-best-type').textContent   = 'single server';
             document.getElementById('qv-max').textContent    = m.max.toFixed(2);
             document.getElementById('qv-min').textContent    = m.min.toFixed(2);
             document.getElementById('qv-spread').textContent = m.spread.toFixed(2);
@@ -927,6 +912,12 @@ function updateUI(data) {
         document.getElementById('stop-btn').style.display  = 'none';
         document.getElementById('reset-btn').style.display = 'inline-flex';
         document.getElementById('post-training').style.display = 'block';
+        // Fix status badges to show done state
+        var progBadge = document.getElementById('status-badge-prog');
+        if (progBadge) { progBadge.className = 'badge badge-done'; progBadge.textContent = 'complete'; }
+        var epBadge = document.getElementById('ep-badge');
+        if (epBadge)   { epBadge.className = 'badge badge-done'; }
+        document.getElementById('progress-bar').style.background = 'linear-gradient(90deg,var(--green),var(--accent))';
         generatePostTrainingAdvice(data);
     }
 }
@@ -952,7 +943,7 @@ function generatePostTrainingAdvice(data) {
             '<span style="color:var(--green);font-weight:600;">✓ Reward plateaued — model likely converged.</span></div>');
     }
     lines.push('<div style="font-size:11px;">' + (avgSp > 5
-        ? '<span style="color:var(--green);">✓ Healthy Q-spread (' + avgSp.toFixed(1) + ')</span> — agent differentiates between action pairs.'
+        ? '<span style="color:var(--green);">✓ Healthy Q-spread (' + avgSp.toFixed(1) + ')</span> — agent differentiates between server actions.'
         : '<span style="color:var(--yellow);">△ Low Q-spread (' + avgSp.toFixed(1) + ')</span> — agent uncertain. Try lower LR or more episodes.') + '</div>');
     el.innerHTML = '<div style="font-weight:600;color:var(--text);margin-bottom:10px;font-size:12px;">Training Assessment</div>' + lines.join('');
 }
@@ -960,31 +951,33 @@ function generatePostTrainingAdvice(data) {
 // ── Charts ────────────────────────────────────────────────────────────────────
 function initCharts() {
     chartsInitialized = true;
-    var sc = {
-        x: { ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}}, grid:{color:'#1e2330'} },
-        y: { ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}}, grid:{color:'#1e2330'} }
-    };
+    function xScale() {
+        return { type:'linear', ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9},maxTicksLimit:8}, grid:{color:'#1e2330'}, title:{display:true,text:'Episode',color:'#6b7590',font:{size:9}} };
+    }
+    function yScale() {
+        return { ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}}, grid:{color:'#1e2330'} };
+    }
     rewardChart = new Chart(document.getElementById('reward-chart'), {
         type:'line', data:{labels:[],datasets:[{data:[],borderColor:'#7c4dff',borderWidth:1.5,pointRadius:0,tension:.3,fill:false}]},
-        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:sc}
+        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{x:xScale(),y:yScale()}}
     });
     avgRewardChart = new Chart(document.getElementById('avg-reward-chart'), {
         type:'line', data:{labels:[],datasets:[{data:[],borderColor:'#00e5ff',borderWidth:2,pointRadius:0,tension:.5,fill:false}]},
-        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:sc}
+        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{x:xScale(),y:yScale()}}
     });
     qvalChart = new Chart(document.getElementById('qval-chart'), {
         type:'bar', data:{labels:[],datasets:[{data:[],backgroundColor:'rgba(0,229,255,.45)',borderRadius:2}]},
         options:{responsive:true,animation:false,plugins:{legend:{display:false},tooltip:{callbacks:{
             label:function(ctx) {
                 var i = ctx.dataIndex;
-                var lbl = actionLabel(i, currentActionMap);
+                var lbl = actionLabel(i);
                 return ctx.parsed.y.toFixed(3) + '  [' + lbl + ']';
             }
-        }}},scales:{x:sc.x,y:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},grid:{color:'#1e2330'},title:{display:true,text:'Q-value',color:'#6b7590',font:{size:9}}}}}
+        }}},scales:{x:xScale(),y:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},grid:{color:'#1e2330'},title:{display:true,text:'Q-value',color:'#6b7590',font:{size:9}}}}}
     });
     qspreadChart = new Chart(document.getElementById('qspread-chart'), {
         type:'line', data:{labels:[],datasets:[{data:[],borderColor:'#ffd600',backgroundColor:'rgba(255,214,0,.05)',borderWidth:2,pointRadius:0,tension:.4}]},
-        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{x:sc.x,y:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},grid:{color:'#1e2330'},title:{display:true,text:'Max − Min Q',color:'#6b7590',font:{size:9}},min:0}}}
+        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{x:xScale(),y:{ticks:{color:'#6b7590',font:{family:'JetBrains Mono',size:9}},grid:{color:'#1e2330'},title:{display:true,text:'Max − Min Q',color:'#6b7590',font:{size:9}},min:0}}}
     });
 }
 
@@ -1000,8 +993,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
         const r = await fetch('/api/training_status');
         const d = await r.json();
-        if (d.action_map) currentActionMap = d.action_map;
         if (d.running || (d.episode > 0 && !d.done)) {
+            if (d.total_episodes > 0) knownTotal = d.total_episodes;
             showProgressSection(d.total_episodes, d.device || 'cpu');
             startPolling();
             updateUI(d);
