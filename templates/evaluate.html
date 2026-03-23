@@ -242,7 +242,7 @@ function toggleHint(trigger) {
 
     <!-- Comparison charts -->
     <div class="grid-2">
-        <div class="chart-box"><div class="chart-title">Mean Reward Comparison</div><canvas id="bar-reward" height="220"></canvas></div>
+        <div class="chart-box"><div class="chart-title">Avg Latency Comparison</div><canvas id="bar-reward" height="220"></canvas></div>
         <div class="chart-box"><div class="chart-title">SLA Violation Count Comparison</div><canvas id="bar-sla" height="220"></canvas></div>
     </div>
 </div>
@@ -700,15 +700,16 @@ function renderSummary(results, evalData) {
     renderDqnDiagnostics(evalData);
 
     // Comparison bar charts
-    var labels  = methods.map(function(m){ return methodNames[m]; });
-    var rewards = methods.map(function(m){ return (results[m]||{}).mean_reward || 0; });
-    var slas    = methods.map(function(m){ return (results[m]||{}).sla_violations || 0; });
-    var bcolors = methods.map(function(m){ return COLORS[m]; });
+    var labels   = methods.map(function(m){ return methodNames[m]; });
+    var latencies = methods.map(function(m){ return (results[m]||{}).avg_latency || 0; });
+    var slas     = methods.map(function(m){ return (results[m]||{}).sla_violations || 0; });
+    var bcolors  = methods.map(function(m){ return COLORS[m]; });
 
     if (barReward) barReward.destroy();
     barReward = new Chart(document.getElementById('bar-reward'), {
-        type:'bar', data:{labels:labels,datasets:[{data:rewards,backgroundColor:bcolors,borderRadius:4}]},
-        options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#6b7590'}},y:{ticks:{color:'#6b7590'},grid:{color:'#1e2330'}}}}
+        type:'bar', data:{labels:labels,datasets:[{data:latencies,backgroundColor:bcolors,borderRadius:4}]},
+        options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' '+ctx.parsed.y.toFixed(2)+' (avg queue depth)';}}}}
+                ,scales:{x:{ticks:{color:'#6b7590'}},y:{ticks:{color:'#6b7590'},grid:{color:'#1e2330'}}}}
     });
     if (barSla) barSla.destroy();
     barSla = new Chart(document.getElementById('bar-sla'), {
